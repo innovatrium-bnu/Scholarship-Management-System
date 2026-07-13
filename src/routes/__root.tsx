@@ -80,27 +80,30 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "BNU Scholarship Management" },
+      { title: "Dashboard — BNU Scholarships" },
       {
         name: "description",
         content:
-          "Registrar Office tool to manage Beaconhouse National University scholarships, awards, and merges.",
+          "Scholarship Management System & Analytics for Beaconhouse National University (BNU)",
       },
       { name: "author", content: "BNU Registrar Office" },
-      { property: "og:title", content: "BNU Scholarship Management" },
+      { property: "og:title", content: "Dashboard — BNU Scholarships" },
       {
         property: "og:description",
-        content: "Internal admin tool for BNU scholarships and student awards.",
+        content: "Scholarship Management System & Analytics for Beaconhouse National University (BNU)",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "Dashboard — BNU Scholarships" },
+      { name: "twitter:description", content: "Scholarship Management System & Analytics for Beaconhouse National University (BNU)" },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/w59mfHGFFAW2Mk7EydiVY3UerzQ2/social-images/social-1783935225123-BNU.webp" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/w59mfHGFFAW2Mk7EydiVY3UerzQ2/social-images/social-1783935225123-BNU.webp" },
     ],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
       },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {

@@ -35,7 +35,7 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Dashboard — BNU Scholarships" },
-      { name: "description", content: "KPIs and scholarship analytics for BNU Registrar Office." },
+      { name: "description", content: "Scholarship Management System & Analytics for Beaconhouse National University (BNU)" },
     ],
   }),
 });
