@@ -1,0 +1,347 @@
+import type { Award, AuditEntry, Scholarship, Student } from "./types";
+
+export const SCHOOLS = [
+  "SVAD",
+  "RHSA",
+  "School of Science and Technology",
+  "School of Education",
+  "School of Law",
+  "Mariam Dawood School of Visual Arts",
+] as const;
+
+export const BATCHES = ["Fall 2021", "Fall 2022", "Fall 2023", "Fall 2024", "Fall 2025"] as const;
+
+const PROGRAMMES: Record<string, string[]> = {
+  SVAD: ["BFA", "MFA"],
+  RHSA: ["BS Architecture", "M.Arch"],
+  "School of Science and Technology": ["BS Computer Science", "BS Software Engineering", "BS Math"],
+  "School of Education": ["BEd", "MEd"],
+  "School of Law": ["LLB", "LLM"],
+  "Mariam Dawood School of Visual Arts": ["BDes Communication Design", "BDes Textile"],
+};
+
+const FIRST = [
+  "Ali", "Ayesha", "Bilal", "Zainab", "Hassan", "Fatima", "Usman", "Hira",
+  "Omar", "Sana", "Ahmed", "Maryam", "Hamza", "Iqra", "Yousuf", "Nida",
+  "Saad", "Amna", "Faisal", "Rabia", "Danyal", "Sadia", "Kamran", "Mahnoor",
+  "Zeeshan", "Anum", "Talha", "Kinza", "Ibrahim", "Mehreen",
+];
+const LAST = [
+  "Khan", "Ahmed", "Malik", "Chaudhry", "Sheikh", "Raza", "Iqbal", "Butt",
+  "Qureshi", "Bhatti", "Siddiqui", "Farooq", "Nawaz", "Aslam", "Javed",
+];
+
+function rand<T>(arr: readonly T[], i: number): T {
+  return arr[i % arr.length]!;
+}
+
+function id(prefix: string, n: number) {
+  return `${prefix}-${n.toString().padStart(4, "0")}`;
+}
+
+export function seedScholarships(): Scholarship[] {
+  const base = {
+    version: 1,
+    effectiveFrom: "2024-09-01",
+    schools: [] as string[],
+    programmes: [] as string[],
+    batches: [...BATCHES],
+    semesterFrom: 1,
+    awardRules: [],
+    retentionRules: [],
+    workStudyHoursPerMonth: 0,
+    requiresReapplication: false,
+    fundingSource: "Internal" as const,
+  };
+  return [
+    {
+      ...base,
+      id: "sch-vc",
+      name: "VC Scholarship",
+      description: "Vice Chancellor's flagship award for top incoming Bachelors students.",
+      studyLevel: "Bachelors",
+      reviewCycle: "Every semester",
+      coverage: [
+        { id: "cov-vc-1", feeHead: "Tuition", benefitKind: "Percentage", value: 100 },
+        { id: "cov-vc-2", feeHead: "Hostel", benefitKind: "Full waiver", value: 100 },
+      ],
+      maxDurationYears: 4,
+      workStudyHoursPerMonth: 8,
+      quotaPerCohort: 1,
+      priorityRank: 1,
+      status: "Active",
+      awardRules: [
+        { id: "r1", kind: "Cohort rank", percentile: 1, description: "Top 1 per cohort" },
+      ],
+      retentionRules: [
+        { id: "r2", kind: "Automatic", field: "cgpa", operator: ">=", threshold: 3.7 },
+      ],
+    },
+    {
+      ...base,
+      id: "sch-dean",
+      name: "Dean's Scholarship",
+      description: "Awarded to high-achieving Bachelors students, reviewed annually.",
+      studyLevel: "Bachelors",
+      reviewCycle: "Annual",
+      coverage: [{ id: "cov-d-1", feeHead: "Tuition", benefitKind: "Percentage", value: 100 }],
+      maxDurationYears: 4,
+      workStudyHoursPerMonth: 8,
+      priorityRank: 2,
+      status: "Active",
+      retentionRules: [
+        { id: "r3", kind: "Automatic", field: "cgpa", operator: ">=", threshold: 3.5 },
+      ],
+    },
+    {
+      ...base,
+      id: "sch-need",
+      name: "Need-Based Scholarship",
+      description: "Financial need scholarship, renewed annually with fresh application.",
+      studyLevel: "Both",
+      reviewCycle: "Annual",
+      coverage: [{ id: "cov-n-1", feeHead: "Tuition", benefitKind: "Percentage", value: 50 }],
+      maxDurationYears: 4,
+      requiresReapplication: true,
+      priorityRank: 3,
+      status: "Active",
+    },
+    {
+      ...base,
+      id: "sch-merit",
+      name: "Merit-Based Scholarship",
+      description: "Semester merit award. Excludes School of Education.",
+      studyLevel: "Bachelors",
+      reviewCycle: "Every semester",
+      coverage: [{ id: "cov-m-1", feeHead: "Tuition", benefitKind: "Percentage", value: 75 }],
+      maxDurationYears: 4,
+      priorityRank: 4,
+      status: "Active",
+      awardRules: [
+        { id: "r4", kind: "Cohort rank", percentile: 10, description: "Top 10% per cohort, Fall 2024+" },
+      ],
+    },
+    {
+      ...base,
+      id: "sch-trans",
+      name: "Transgender Inclusion Scholarship",
+      description: "Inclusion award with tuition and conditional hostel support.",
+      studyLevel: "Both",
+      reviewCycle: "Annual",
+      coverage: [
+        { id: "cov-t-1", feeHead: "Tuition", benefitKind: "Percentage", value: 50 },
+        {
+          id: "cov-t-2",
+          feeHead: "Hostel",
+          benefitKind: "Fixed amount",
+          value: 20000,
+          conditionalOn: "Student is not domiciled in Lahore",
+        },
+      ],
+      maxDurationYears: 4,
+      priorityRank: 5,
+      status: "Active",
+    },
+    {
+      ...base,
+      id: "sch-sports",
+      name: "Sports Scholarship",
+      description: "For students representing BNU in competitive sports.",
+      studyLevel: "Bachelors",
+      reviewCycle: "Every semester",
+      coverage: [{ id: "cov-s-1", feeHead: "Tuition", benefitKind: "Percentage", value: 30 }],
+      maxDurationYears: 4,
+      priorityRank: 6,
+      status: "Active",
+    },
+    {
+      ...base,
+      id: "sch-inst",
+      name: "BNU Institutional Support",
+      description: "For students from MOU partner schools.",
+      studyLevel: "Both",
+      reviewCycle: "Annual",
+      coverage: [{ id: "cov-i-1", feeHead: "Tuition", benefitKind: "Percentage", value: 25 }],
+      maxDurationYears: 4,
+      priorityRank: 7,
+      status: "Active",
+    },
+    {
+      ...base,
+      id: "sch-ext",
+      name: "Externally Funded Need-Based",
+      description: "Donor-funded need scholarship. May exceed 100% ceiling by donor agreement.",
+      studyLevel: "Both",
+      reviewCycle: "Annual",
+      coverage: [{ id: "cov-e-1", feeHead: "Tuition", benefitKind: "Percentage", value: 40 }],
+      maxDurationYears: 4,
+      fundingSource: "Donor",
+      donorName: "Aslam Foundation",
+      priorityRank: 8,
+      status: "Active",
+      mayExceedCeiling: true,
+    },
+  ];
+}
+
+export function seedStudents(): Student[] {
+  const students: Student[] = [];
+  let n = 1;
+  for (const school of SCHOOLS) {
+    const progs = PROGRAMMES[school]!;
+    for (let i = 0; i < 10; i++) {
+      const first = rand(FIRST, n * 3 + i);
+      const last = rand(LAST, n * 5 + i);
+      const batch = rand(BATCHES, n + i);
+      const programme = rand(progs, i);
+      const cgpa = Math.round((2.1 + ((n * 37 + i * 17) % 190) / 100) * 100) / 100;
+      const studyLevel: "Bachelors" | "Masters" = programme.startsWith("M") || programme.startsWith("LLM") ? "Masters" : "Bachelors";
+      const domicile = i % 3 === 0 ? "Lahore" : i % 3 === 1 ? "Karachi" : "Peshawar";
+      students.push({
+        regNo: id("BNU", n),
+        name: `${first} ${last}`,
+        school,
+        programme,
+        studyLevel,
+        batch,
+        cgpa,
+        creditHours: 15 + (i % 4),
+        domicile,
+        isOutOfStation: domicile !== "Lahore",
+        tuitionFee: studyLevel === "Bachelors" ? 350000 : 400000,
+        hostelFee: 80000,
+        messFee: 40000,
+        otherFee: 15000,
+      });
+      n++;
+    }
+  }
+  return students;
+}
+
+export function seedAwards(students: Student[]): Award[] {
+  const awards: Award[] = [];
+  const now = "2025-09-01";
+  const push = (
+    studentRegNo: string,
+    schId: string,
+    version: number,
+    components: Award["components"],
+  ) => {
+    awards.push({
+      id: `aw-${awards.length + 1}`,
+      studentRegNo,
+      scholarshipId: schId,
+      scholarshipVersion: version,
+      status: "Active",
+      components,
+      effectiveFrom: now,
+      authorisedBy: "Registrar Office",
+      reasonCode: "Initial award",
+    });
+  };
+
+  // Overlapping: Merit 75 + Need 50 on student 1, 5, 12.
+  for (const idx of [0, 4, 11]) {
+    const s = students[idx];
+    if (!s) continue;
+    push(s.regNo, "sch-merit", 1, [
+      {
+        feeHead: "Tuition",
+        entitlement: 75,
+        entitlementKind: "Percentage",
+        entitlementValue: 75,
+        applied: 0,
+        isOverridden: false,
+      },
+    ]);
+    push(s.regNo, "sch-need", 1, [
+      {
+        feeHead: "Tuition",
+        entitlement: 50,
+        entitlementKind: "Percentage",
+        entitlementValue: 50,
+        applied: 0,
+        isOverridden: false,
+      },
+    ]);
+  }
+
+  // Pinned VC override at 100% on student 20.
+  const pinned = students[19];
+  if (pinned) {
+    push(pinned.regNo, "sch-vc", 1, [
+      {
+        feeHead: "Tuition",
+        entitlement: 100,
+        entitlementKind: "Percentage",
+        entitlementValue: 100,
+        applied: 0,
+        isOverridden: true,
+        overrideReason: "VC Order 2024/17",
+        overrideAuthority: "Vice Chancellor",
+      },
+      {
+        feeHead: "Hostel",
+        entitlement: 100,
+        entitlementKind: "Full waiver",
+        entitlementValue: 100,
+        applied: 0,
+        isOverridden: false,
+      },
+    ]);
+    push(pinned.regNo, "sch-need", 1, [
+      {
+        feeHead: "Tuition",
+        entitlement: 50,
+        entitlementKind: "Percentage",
+        entitlementValue: 50,
+        applied: 0,
+        isOverridden: false,
+      },
+    ]);
+  }
+
+  // Sprinkle single awards across other students.
+  const singles: [number, string, number, "Percentage" | "Full waiver" | "Fixed amount", number][] = [
+    [2, "sch-dean", 100, "Percentage", 100],
+    [3, "sch-sports", 30, "Percentage", 30],
+    [6, "sch-inst", 25, "Percentage", 25],
+    [7, "sch-ext", 40, "Percentage", 40],
+    [8, "sch-trans", 50, "Percentage", 50],
+    [9, "sch-need", 50, "Percentage", 50],
+    [13, "sch-merit", 50, "Percentage", 50],
+    [14, "sch-dean", 100, "Percentage", 100],
+    [15, "sch-need", 25, "Percentage", 25],
+    [16, "sch-sports", 30, "Percentage", 30],
+    [17, "sch-inst", 25, "Percentage", 25],
+    [22, "sch-merit", 75, "Percentage", 75],
+    [24, "sch-ext", 40, "Percentage", 40],
+    [27, "sch-need", 50, "Percentage", 50],
+    [30, "sch-dean", 100, "Percentage", 100],
+    [35, "sch-sports", 30, "Percentage", 30],
+    [40, "sch-trans", 50, "Percentage", 50],
+    [45, "sch-merit", 50, "Percentage", 50],
+    [50, "sch-need", 50, "Percentage", 50],
+  ];
+  for (const [i, schId, ent, kind, val] of singles) {
+    const s = students[i];
+    if (!s) continue;
+    push(s.regNo, schId, 1, [
+      {
+        feeHead: "Tuition",
+        entitlement: ent,
+        entitlementKind: kind,
+        entitlementValue: val,
+        applied: 0,
+        isOverridden: false,
+      },
+    ]);
+  }
+
+  return awards;
+}
+
+export function seedAudit(): AuditEntry[] {
+  return [];
+}
