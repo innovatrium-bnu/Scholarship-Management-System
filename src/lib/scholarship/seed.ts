@@ -1,4 +1,4 @@
-import type { Award, AuditEntry, Scholarship, Student } from "./types";
+import type { Award, AuditEntry, AssignmentBatch, Scholarship, Student } from "./types";
 
 export const SCHOOLS = [
   "SVAD",
@@ -10,6 +10,41 @@ export const SCHOOLS = [
 ] as const;
 
 export const BATCHES = ["Fall 2021", "Fall 2022", "Fall 2023", "Fall 2024", "Fall 2025"] as const;
+
+export const SEMESTERS = [
+  "Fall 2023",
+  "Spring 2024",
+  "Fall 2024",
+  "Spring 2025",
+  "Fall 2025",
+  "Spring 2026",
+] as const;
+
+export const GEOGRAPHY: Record<string, Record<string, string[]>> = {
+  Punjab: {
+    Lahore: ["Lahore Cantt", "Model Town", "Gulberg", "DHA"],
+    Faisalabad: ["Faisalabad City", "Jaranwala"],
+    Multan: ["Multan City", "Shujabad"],
+    Rawalpindi: ["Rawalpindi Cantt", "Taxila"],
+  },
+  Sindh: {
+    Karachi: ["Karachi Central", "Karachi South", "Karachi East"],
+    Hyderabad: ["Hyderabad City", "Latifabad"],
+  },
+  KPK: {
+    Peshawar: ["Peshawar City", "Hayatabad"],
+  },
+  Balochistan: {
+    Quetta: ["Quetta City", "Sariab"],
+  },
+};
+
+const GEO_TRIPLES: { province: string; city: string; district: string }[] = [];
+for (const [province, cities] of Object.entries(GEOGRAPHY)) {
+  for (const [city, districts] of Object.entries(cities)) {
+    for (const d of districts) GEO_TRIPLES.push({ province, city, district: d });
+  }
+}
 
 const PROGRAMMES: Record<string, string[]> = {
   SVAD: ["BFA", "MFA"],
@@ -189,14 +224,16 @@ export function seedStudents(): Student[] {
   let n = 1;
   for (const school of SCHOOLS) {
     const progs = PROGRAMMES[school]!;
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 14; i++) {
       const first = rand(FIRST, n * 3 + i);
       const last = rand(LAST, n * 5 + i);
-      const batch = rand(BATCHES, n + i);
+      // Bias more students to Fall 2025 for demo (~40%)
+      const batch = i < 6 ? "Fall 2025" : rand(BATCHES, n + i);
       const programme = rand(progs, i);
       const cgpa = Math.round((2.1 + ((n * 37 + i * 17) % 190) / 100) * 100) / 100;
       const studyLevel: "Bachelors" | "Masters" = programme.startsWith("M") || programme.startsWith("LLM") ? "Masters" : "Bachelors";
-      const domicile = i % 3 === 0 ? "Lahore" : i % 3 === 1 ? "Karachi" : "Peshawar";
+      const geo = GEO_TRIPLES[(n + i * 7) % GEO_TRIPLES.length]!;
+      const domicile = geo.city;
       students.push({
         regNo: id("BNU", n),
         name: `${first} ${last}`,
@@ -212,6 +249,13 @@ export function seedStudents(): Student[] {
         hostelFee: 80000,
         messFee: 40000,
         otherFee: 15000,
+        province: geo.province,
+        city: geo.city,
+        district: geo.district,
+        financialNeedVerified: (n + i) % 5 === 0,
+        personalStatementOk: (n + i) % 3 !== 0,
+        hasSportsMedal: (n + i) % 11 === 0,
+        bfitMember: (n + i) % 7 === 0,
       });
       n++;
     }
@@ -339,9 +383,29 @@ export function seedAwards(students: Student[]): Award[] {
     ]);
   }
 
+  // Seed ≥8 Fall 2025 students already on Need-Based (to trigger ceiling conflicts when Merit is assigned).
+  const fall2025 = students.filter((s) => s.batch === "Fall 2025").slice(0, 12);
+  for (const s of fall2025) {
+    if (awards.some((a) => a.studentRegNo === s.regNo && a.scholarshipId === "sch-need")) continue;
+    push(s.regNo, "sch-need", 1, [
+      {
+        feeHead: "Tuition",
+        entitlement: 50,
+        entitlementKind: "Percentage",
+        entitlementValue: 50,
+        applied: 0,
+        isOverridden: false,
+      },
+    ]);
+  }
+
   return awards;
 }
 
 export function seedAudit(): AuditEntry[] {
+  return [];
+}
+
+export function seedBatches(): AssignmentBatch[] {
   return [];
 }
