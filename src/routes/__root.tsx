@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -134,15 +135,28 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-
   return (
     <QueryClientProvider client={queryClient}>
       <ScholarshipProvider>
-        <AppShell>
-          <Outlet />
-        </AppShell>
+        <ShellSwitcher />
         <Toaster position="top-right" richColors closeButton />
       </ScholarshipProvider>
     </QueryClientProvider>
+  );
+}
+
+function ShellSwitcher() {
+  const pathname = useRouterState({ select: (r) => r.location.pathname });
+  if (pathname.startsWith("/assign/")) {
+    return (
+      <div className="min-h-screen bg-background text-foreground">
+        <Outlet />
+      </div>
+    );
+  }
+  return (
+    <AppShell>
+      <Outlet />
+    </AppShell>
   );
 }

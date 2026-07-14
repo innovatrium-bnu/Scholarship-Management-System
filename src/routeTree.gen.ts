@@ -13,6 +13,8 @@ import { Route as StudentsRouteImport } from './routes/students'
 import { Route as ScholarshipsRouteImport } from './routes/scholarships'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StudentsRegNoRouteImport } from './routes/students.$regNo'
+import { Route as SettingsPrecedenceRouteImport } from './routes/settings.precedence'
+import { Route as AssignScholarshipIdRouteImport } from './routes/assign.$scholarshipId'
 
 const StudentsRoute = StudentsRouteImport.update({
   id: '/students',
@@ -34,17 +36,31 @@ const StudentsRegNoRoute = StudentsRegNoRouteImport.update({
   path: '/$regNo',
   getParentRoute: () => StudentsRoute,
 } as any)
+const SettingsPrecedenceRoute = SettingsPrecedenceRouteImport.update({
+  id: '/settings/precedence',
+  path: '/settings/precedence',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AssignScholarshipIdRoute = AssignScholarshipIdRouteImport.update({
+  id: '/assign/$scholarshipId',
+  path: '/assign/$scholarshipId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/scholarships': typeof ScholarshipsRoute
   '/students': typeof StudentsRouteWithChildren
+  '/assign/$scholarshipId': typeof AssignScholarshipIdRoute
+  '/settings/precedence': typeof SettingsPrecedenceRoute
   '/students/$regNo': typeof StudentsRegNoRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/scholarships': typeof ScholarshipsRoute
   '/students': typeof StudentsRouteWithChildren
+  '/assign/$scholarshipId': typeof AssignScholarshipIdRoute
+  '/settings/precedence': typeof SettingsPrecedenceRoute
   '/students/$regNo': typeof StudentsRegNoRoute
 }
 export interface FileRoutesById {
@@ -52,20 +68,43 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/scholarships': typeof ScholarshipsRoute
   '/students': typeof StudentsRouteWithChildren
+  '/assign/$scholarshipId': typeof AssignScholarshipIdRoute
+  '/settings/precedence': typeof SettingsPrecedenceRoute
   '/students/$regNo': typeof StudentsRegNoRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/scholarships' | '/students' | '/students/$regNo'
+  fullPaths:
+    | '/'
+    | '/scholarships'
+    | '/students'
+    | '/assign/$scholarshipId'
+    | '/settings/precedence'
+    | '/students/$regNo'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/scholarships' | '/students' | '/students/$regNo'
-  id: '__root__' | '/' | '/scholarships' | '/students' | '/students/$regNo'
+  to:
+    | '/'
+    | '/scholarships'
+    | '/students'
+    | '/assign/$scholarshipId'
+    | '/settings/precedence'
+    | '/students/$regNo'
+  id:
+    | '__root__'
+    | '/'
+    | '/scholarships'
+    | '/students'
+    | '/assign/$scholarshipId'
+    | '/settings/precedence'
+    | '/students/$regNo'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ScholarshipsRoute: typeof ScholarshipsRoute
   StudentsRoute: typeof StudentsRouteWithChildren
+  AssignScholarshipIdRoute: typeof AssignScholarshipIdRoute
+  SettingsPrecedenceRoute: typeof SettingsPrecedenceRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -98,6 +137,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudentsRegNoRouteImport
       parentRoute: typeof StudentsRoute
     }
+    '/settings/precedence': {
+      id: '/settings/precedence'
+      path: '/settings/precedence'
+      fullPath: '/settings/precedence'
+      preLoaderRoute: typeof SettingsPrecedenceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/assign/$scholarshipId': {
+      id: '/assign/$scholarshipId'
+      path: '/assign/$scholarshipId'
+      fullPath: '/assign/$scholarshipId'
+      preLoaderRoute: typeof AssignScholarshipIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -117,17 +170,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ScholarshipsRoute: ScholarshipsRoute,
   StudentsRoute: StudentsRouteWithChildren,
+  AssignScholarshipIdRoute: AssignScholarshipIdRoute,
+  SettingsPrecedenceRoute: SettingsPrecedenceRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

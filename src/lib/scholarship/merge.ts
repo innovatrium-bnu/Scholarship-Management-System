@@ -7,8 +7,6 @@ import type {
   Student,
 } from "./types";
 
-const FEE_HEADS: FeeHead[] = ["Tuition", "Hostel", "Mess", "Other"];
-
 export function feeOf(student: Student, head: FeeHead): number {
   switch (head) {
     case "Tuition":
@@ -18,6 +16,8 @@ export function feeOf(student: Student, head: FeeHead): number {
     case "Mess":
       return student.messFee;
     case "Other":
+      return student.otherFee;
+    default:
       return student.otherFee;
   }
 }
@@ -32,6 +32,7 @@ export function computeMerge(
   scholarships: Scholarship[],
 ): MergedAward[] {
   const scholarshipById = new Map(scholarships.map((s) => [s.id, s]));
+  const precedence = new Map(scholarships.map((s, i) => [s.id, i]));
 
   const merged: MergedAward[] = activeAwards
     .map((a) => {
@@ -45,7 +46,9 @@ export function computeMerge(
     })
     .filter((x): x is MergedAward => x !== null);
 
-  for (const head of FEE_HEADS) {
+  const heads = new Set<FeeHead>();
+  for (const a of activeAwards) for (const c of a.components) heads.add(c.feeHead);
+  for (const head of heads) {
     // Gather entries touching this head.
     type Entry = {
       m: MergedAward;
@@ -84,7 +87,11 @@ export function computeMerge(
     if (pctHeadroom < 0) pctHeadroom = 0;
 
     // Sort non-pinned by scholarship priority ascending (1 = highest).
-    nonPinned.sort((a, b) => a.m.scholarship.priorityRank - b.m.scholarship.priorityRank);
+    nonPinned.sort(
+      (a, b) =>
+        (precedence.get(a.m.scholarship.id) ?? 99) -
+        (precedence.get(b.m.scholarship.id) ?? 99),
+    );
 
     // Assign pinned first.
     for (const p of pinned) {

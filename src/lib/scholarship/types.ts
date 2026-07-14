@@ -1,4 +1,5 @@
-export type FeeHead = "Tuition" | "Hostel" | "Mess" | "Other";
+export type FeeHead = string;
+export const CORE_FEE_HEADS: readonly string[] = ["Tuition", "Hostel", "Mess", "Other"];
 export type StudyLevel = "Bachelors" | "Masters" | "Both";
 export type BenefitKind = "Percentage" | "Full waiver" | "Fixed amount";
 export type ReviewCycle = "Every semester" | "Annual";
@@ -32,6 +33,8 @@ export interface Scholarship {
   programmes: string[];
   batches: string[];
   semesterFrom: number;
+  semesterTill?: number;
+  allSemesters?: boolean;
   reviewCycle: ReviewCycle;
   coverage: CoverageLine[];
   awardRules: Rule[];
@@ -64,6 +67,13 @@ export interface Student {
   hostelFee: number;
   messFee: number;
   otherFee: number;
+  province: string;
+  city: string;
+  district: string;
+  financialNeedVerified: boolean;
+  personalStatementOk: boolean;
+  hasSportsMedal: boolean;
+  bfitMember: boolean;
 }
 
 export interface AwardComponent {
@@ -82,16 +92,17 @@ export interface Award {
   studentRegNo: string;
   scholarshipId: string;
   scholarshipVersion: number;
-  status: "Active" | "Suspended" | "Revoked" | "Expired";
+  status: "Active" | "Revoked";
   components: AwardComponent[];
   effectiveFrom: string;
   authorisedBy: string;
   reasonCode: string;
+  batchId?: string;
 }
 
 export interface AuditEntry {
   id: string;
-  entityType: "Scholarship" | "Student" | "Award";
+  entityType: "Scholarship" | "Student" | "Award" | "Batch";
   entityId: string;
   action: string;
   oldValue?: unknown;
@@ -99,6 +110,17 @@ export interface AuditEntry {
   reason?: string;
   actor: string;
   timestamp: string;
+}
+
+export interface AssignmentBatch {
+  id: string;
+  scholarshipId: string;
+  actor: string;
+  timestamp: string;
+  reason: string;
+  mode: "Evaluate" | "Direct";
+  awardIds: string[];
+  undone: boolean;
 }
 
 export interface MergedComponent {

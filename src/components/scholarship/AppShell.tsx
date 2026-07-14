@@ -1,16 +1,11 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, GraduationCap, Users } from "lucide-react";
+import { LayoutDashboard, GraduationCap, Users, Settings, PieChart } from "lucide-react";
 import type { ReactNode } from "react";
-
-type NavItem = { to: "/" | "/scholarships" | "/students"; label: string; icon: typeof LayoutDashboard; exact?: boolean };
-const NAV: NavItem[] = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
-  { to: "/scholarships", label: "Scholarships", icon: GraduationCap },
-  { to: "/students", label: "Students", icon: Users },
-];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
+  const isActive = (to: string, exact?: boolean) => (exact ? pathname === to : pathname === to || pathname.startsWith(to + "/") || pathname.startsWith(to + "?"));
+  const dashboardOpen = pathname === "/" || pathname.startsWith("/students");
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
@@ -28,26 +23,19 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </div>
-        <nav className="flex-1 p-3 space-y-0.5">
-          {NAV.map((n) => {
-            const active = n.exact ? pathname === n.to : pathname.startsWith(n.to);
-            const Icon = n.icon;
-            return (
-              <Link
-                key={n.to}
-                to={n.to}
-                className={[
-                  "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors",
-                  active
-                    ? "bg-white text-primary font-medium shadow-[0_1px_2px_rgba(0,0,0,0.04)] border border-border"
-                    : "text-foreground/80 hover:bg-white/60 hover:text-foreground",
-                ].join(" ")}
-              >
-                <Icon className="h-4 w-4" strokeWidth={active ? 2.25 : 2} />
-                <span>{n.label}</span>
-              </Link>
-            );
-          })}
+        <nav className="flex-1 p-3 space-y-0.5 text-sm">
+          <div className={`px-3 py-1.5 flex items-center gap-2.5 text-xs uppercase tracking-wide font-semibold ${dashboardOpen ? "text-foreground" : "text-muted-foreground"}`}>
+            <LayoutDashboard className="h-3.5 w-3.5" />
+            Dashboard
+          </div>
+          <div className="ml-1 pl-3 border-l border-border/80 space-y-0.5">
+            <SubNavLink to="/" exact label="Overview" icon={PieChart} active={isActive("/", true)} />
+            <SubNavLink to="/students" label="Students" icon={Users} active={isActive("/students")} />
+          </div>
+          <div className="pt-2">
+            <TopNavLink to="/scholarships" label="Scholarships" icon={GraduationCap} active={isActive("/scholarships")} />
+            <TopNavLink to="/settings/precedence" label="Settings" icon={Settings} active={pathname.startsWith("/settings")} />
+          </div>
         </nav>
         <div className="p-4 border-t border-border text-[11px] text-muted-foreground">
           Fall 2025 · Demo build
@@ -55,6 +43,41 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
       <main className="flex-1 min-w-0 flex flex-col">{children}</main>
     </div>
+  );
+}
+
+function TopNavLink({ to, label, icon: Icon, active }: { to: string; label: string; icon: typeof LayoutDashboard; active: boolean }) {
+  return (
+    <Link
+      to={to}
+      className={[
+        "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors",
+        active
+          ? "bg-white text-primary font-medium shadow-[0_1px_2px_rgba(0,0,0,0.04)] border border-border"
+          : "text-foreground/80 hover:bg-white/60 hover:text-foreground",
+      ].join(" ")}
+    >
+      <Icon className="h-4 w-4" strokeWidth={active ? 2.25 : 2} />
+      <span>{label}</span>
+    </Link>
+  );
+}
+
+function SubNavLink({ to, label, icon: Icon, active, exact }: { to: string; label: string; icon: typeof LayoutDashboard; active: boolean; exact?: boolean }) {
+  void exact;
+  return (
+    <Link
+      to={to}
+      className={[
+        "flex items-center gap-2 px-3 py-1.5 rounded-md text-[13px] transition-colors",
+        active
+          ? "bg-white text-primary font-medium border border-border"
+          : "text-foreground/75 hover:bg-white/60 hover:text-foreground",
+      ].join(" ")}
+    >
+      <Icon className="h-3.5 w-3.5" strokeWidth={active ? 2.25 : 2} />
+      <span>{label}</span>
+    </Link>
   );
 }
 
