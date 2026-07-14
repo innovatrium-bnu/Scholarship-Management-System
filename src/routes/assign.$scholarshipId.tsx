@@ -58,16 +58,8 @@ function AssignFlow() {
   const [showOnlyConflicts, setShowOnlyConflicts] = useState(false);
   const [committedBatchId, setCommittedBatchId] = useState<string | null>(null);
 
-  if (!scholarship) {
-    return (
-      <div className="p-10 max-w-md mx-auto text-center">
-        <p className="text-sm text-muted-foreground">Scholarship not found.</p>
-        <Link to="/scholarships" className="text-sm text-primary">Back to scholarships</Link>
-      </div>
-    );
-  }
-
   const targeted: Student[] = useMemo(() => {
+    if (!scholarship) return [];
     if (who === "all") return students;
     if (who === "cohort") {
       return students.filter((s) => {
@@ -81,6 +73,7 @@ function AssignFlow() {
   }, [who, students, cohort, picked]);
 
   const evaluated: EvalResult[] = useMemo(() => {
+    if (!scholarship) return [];
     if (how === "direct") {
       return targeted.map<EvalResult>((s) => {
         const held = awards.some((a) => a.studentRegNo === s.regNo && a.scholarshipId === scholarshipId && a.status === "Active");
@@ -108,6 +101,7 @@ function AssignFlow() {
   // Ceiling detection per candidate
   const conflictSet = useMemo(() => {
     const set = new Set<string>();
+    if (!scholarship) return set;
     for (const r of evaluated) {
       if (r.status === "AlreadyHolds") continue;
       const existing = awards.filter((a) => a.studentRegNo === r.student.regNo && a.status === "Active");
@@ -126,6 +120,15 @@ function AssignFlow() {
     }
     return set;
   }, [evaluated, awards, scholarship]);
+
+  if (!scholarship) {
+    return (
+      <div className="p-10 max-w-md mx-auto text-center">
+        <p className="text-sm text-muted-foreground">Scholarship not found.</p>
+        <Link to="/scholarships" className="text-sm text-primary">Back to scholarships</Link>
+      </div>
+    );
+  }
 
   const quota = scholarship.quotaPerCohort;
   const quotaExceeded = quota != null && buckets.Eligible.length > quota;

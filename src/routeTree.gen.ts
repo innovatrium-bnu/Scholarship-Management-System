@@ -13,6 +13,7 @@ import { Route as StudentsRouteImport } from './routes/students'
 import { Route as ScholarshipsRouteImport } from './routes/scholarships'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StudentsRegNoRouteImport } from './routes/students.$regNo'
+import { Route as SettingsPrecedenceRouteImport } from './routes/settings.precedence'
 import { Route as AssignScholarshipIdRouteImport } from './routes/assign.$scholarshipId'
 
 const StudentsRoute = StudentsRouteImport.update({
@@ -35,6 +36,11 @@ const StudentsRegNoRoute = StudentsRegNoRouteImport.update({
   path: '/$regNo',
   getParentRoute: () => StudentsRoute,
 } as any)
+const SettingsPrecedenceRoute = SettingsPrecedenceRouteImport.update({
+  id: '/settings/precedence',
+  path: '/settings/precedence',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AssignScholarshipIdRoute = AssignScholarshipIdRouteImport.update({
   id: '/assign/$scholarshipId',
   path: '/assign/$scholarshipId',
@@ -46,6 +52,7 @@ export interface FileRoutesByFullPath {
   '/scholarships': typeof ScholarshipsRoute
   '/students': typeof StudentsRouteWithChildren
   '/assign/$scholarshipId': typeof AssignScholarshipIdRoute
+  '/settings/precedence': typeof SettingsPrecedenceRoute
   '/students/$regNo': typeof StudentsRegNoRoute
 }
 export interface FileRoutesByTo {
@@ -53,6 +60,7 @@ export interface FileRoutesByTo {
   '/scholarships': typeof ScholarshipsRoute
   '/students': typeof StudentsRouteWithChildren
   '/assign/$scholarshipId': typeof AssignScholarshipIdRoute
+  '/settings/precedence': typeof SettingsPrecedenceRoute
   '/students/$regNo': typeof StudentsRegNoRoute
 }
 export interface FileRoutesById {
@@ -61,6 +69,7 @@ export interface FileRoutesById {
   '/scholarships': typeof ScholarshipsRoute
   '/students': typeof StudentsRouteWithChildren
   '/assign/$scholarshipId': typeof AssignScholarshipIdRoute
+  '/settings/precedence': typeof SettingsPrecedenceRoute
   '/students/$regNo': typeof StudentsRegNoRoute
 }
 export interface FileRouteTypes {
@@ -70,6 +79,7 @@ export interface FileRouteTypes {
     | '/scholarships'
     | '/students'
     | '/assign/$scholarshipId'
+    | '/settings/precedence'
     | '/students/$regNo'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -77,6 +87,7 @@ export interface FileRouteTypes {
     | '/scholarships'
     | '/students'
     | '/assign/$scholarshipId'
+    | '/settings/precedence'
     | '/students/$regNo'
   id:
     | '__root__'
@@ -84,6 +95,7 @@ export interface FileRouteTypes {
     | '/scholarships'
     | '/students'
     | '/assign/$scholarshipId'
+    | '/settings/precedence'
     | '/students/$regNo'
   fileRoutesById: FileRoutesById
 }
@@ -92,6 +104,7 @@ export interface RootRouteChildren {
   ScholarshipsRoute: typeof ScholarshipsRoute
   StudentsRoute: typeof StudentsRouteWithChildren
   AssignScholarshipIdRoute: typeof AssignScholarshipIdRoute
+  SettingsPrecedenceRoute: typeof SettingsPrecedenceRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -124,6 +137,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudentsRegNoRouteImport
       parentRoute: typeof StudentsRoute
     }
+    '/settings/precedence': {
+      id: '/settings/precedence'
+      path: '/settings/precedence'
+      fullPath: '/settings/precedence'
+      preLoaderRoute: typeof SettingsPrecedenceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/assign/$scholarshipId': {
       id: '/assign/$scholarshipId'
       path: '/assign/$scholarshipId'
@@ -151,6 +171,7 @@ const rootRouteChildren: RootRouteChildren = {
   ScholarshipsRoute: ScholarshipsRoute,
   StudentsRoute: StudentsRouteWithChildren,
   AssignScholarshipIdRoute: AssignScholarshipIdRoute,
+  SettingsPrecedenceRoute: SettingsPrecedenceRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
