@@ -1,15 +1,27 @@
 import type { Award, AuditEntry, AssignmentBatch, Scholarship, Student } from "./types";
 
 export const SCHOOLS = [
-  "SVAD",
-  "RHSA",
-  "School of Science and Technology",
+  "Mariam Dawood School of Visual Arts & Design",
+  "Razia Hassan School of Architecture",
+  "Seeta Majeed School of Liberal Arts & Social Sciences",
+  "School of Media and Mass Communication",
+  "School of Computer & IT",
   "School of Education",
-  "School of Law",
-  "Mariam Dawood School of Visual Arts",
+  "School of Management Sciences",
+  "Institute of Psychology",
 ] as const;
 
-export const BATCHES = ["Fall 2021", "Fall 2022", "Fall 2023", "Fall 2024", "Fall 2025"] as const;
+export const BATCHES = [
+  "Fall 2021",
+  "Spring 2022",
+  "Fall 2022",
+  "Spring 2023",
+  "Fall 2023",
+  "Spring 2024",
+  "Fall 2024",
+  "Spring 2025",
+  "Fall 2025",
+] as const;
 
 export const SEMESTERS = [
   "Fall 2023",
@@ -47,12 +59,14 @@ for (const [province, cities] of Object.entries(GEOGRAPHY)) {
 }
 
 export const PROGRAMMES: Record<string, string[]> = {
-  SVAD: ["BFA", "MFA"],
-  RHSA: ["BS Architecture", "M.Arch"],
-  "School of Science and Technology": ["BS Computer Science", "BS Software Engineering", "BS Math"],
+  "Mariam Dawood School of Visual Arts & Design": ["BFA", "MFA", "BDes Communication Design", "BDes Textile"],
+  "Razia Hassan School of Architecture": ["BS Architecture", "M.Arch"],
+  "Seeta Majeed School of Liberal Arts & Social Sciences": ["BA Liberal Arts", "BS Social Sciences", "BA English Literature"],
+  "School of Media and Mass Communication": ["BS Mass Communication", "BS Media Studies"],
+  "School of Computer & IT": ["BS Computer Science", "BS Software Engineering", "BS Information Technology"],
   "School of Education": ["BEd", "MEd"],
-  "School of Law": ["LLB", "LLM"],
-  "Mariam Dawood School of Visual Arts": ["BDes Communication Design", "BDes Textile"],
+  "School of Management Sciences": ["BBA", "MBA"],
+  "Institute of Psychology": ["BS Psychology", "MS Psychology"],
 };
 
 const FIRST = [
@@ -70,8 +84,10 @@ function rand<T>(arr: readonly T[], i: number): T {
   return arr[i % arr.length]!;
 }
 
-function id(prefix: string, n: number) {
-  return `${prefix}-${n.toString().padStart(4, "0")}`;
+function regNoFor(batch: string, seq: number): string {
+  const [term, year] = batch.split(" ");
+  const prefix = term === "Spring" ? "S" : "F";
+  return `${prefix}${year}-${seq.toString().padStart(3, "0")}`;
 }
 
 export function seedScholarships(): Scholarship[] {
@@ -216,6 +232,7 @@ export function seedScholarships(): Scholarship[] {
 
 export function seedStudents(): Student[] {
   const students: Student[] = [];
+  const batchSeq: Record<string, number> = {};
   let n = 1;
   for (const school of SCHOOLS) {
     const progs = PROGRAMMES[school]!;
@@ -226,11 +243,12 @@ export function seedStudents(): Student[] {
       const batch = i < 6 ? "Fall 2025" : rand(BATCHES, n + i);
       const programme = rand(progs, i);
       const cgpa = Math.round((2.1 + ((n * 37 + i * 17) % 190) / 100) * 100) / 100;
-      const studyLevel: "Bachelors" | "Masters" = programme.startsWith("M") || programme.startsWith("LLM") ? "Masters" : "Bachelors";
+      const studyLevel: "Bachelors" | "Masters" = programme.startsWith("M") ? "Masters" : "Bachelors";
       const geo = GEO_TRIPLES[(n + i * 7) % GEO_TRIPLES.length]!;
       const domicile = geo.city;
+      batchSeq[batch] = (batchSeq[batch] ?? 0) + 1;
       students.push({
-        regNo: id("BNU", n),
+        regNo: regNoFor(batch, batchSeq[batch]),
         name: `${first} ${last}`,
         school,
         programme,

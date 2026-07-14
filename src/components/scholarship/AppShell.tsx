@@ -1,11 +1,12 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, GraduationCap, Users, Settings, PieChart } from "lucide-react";
+import { LayoutDashboard, GraduationCap, Users, Settings, PieChart, Plus, Pencil, UserPlus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const isActive = (to: string, exact?: boolean) => (exact ? pathname === to : pathname === to || pathname.startsWith(to + "/") || pathname.startsWith(to + "?"));
   const dashboardOpen = pathname === "/" || pathname.startsWith("/students");
+  const scholarshipsOpen = pathname.startsWith("/scholarships");
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
@@ -33,7 +34,18 @@ export function AppShell({ children }: { children: ReactNode }) {
             <SubNavLink to="/students" label="Students" icon={Users} active={isActive("/students")} />
           </div>
           <div className="pt-2">
-            <TopNavLink to="/scholarships" label="Scholarships" icon={GraduationCap} active={isActive("/scholarships")} />
+            <div className={`px-3 py-1.5 flex items-center gap-2.5 text-xs uppercase tracking-wide font-semibold ${scholarshipsOpen ? "text-foreground" : "text-muted-foreground"}`}>
+              <GraduationCap className="h-3.5 w-3.5" />
+              Scholarships
+            </div>
+            <div className="ml-1 pl-3 border-l border-border/80 space-y-0.5">
+              <SubNavLink to="/scholarships/create" label="Create" icon={Plus} active={isActive("/scholarships/create")} />
+              <SubNavLink to="/scholarships" exact label="Update" icon={Pencil} active={isActive("/scholarships", true)} />
+              <SubNavLink to="/scholarships/apply" label="Apply" icon={UserPlus} active={isActive("/scholarships/apply")} />
+              <SubNavLink to="/scholarships/delete" label="Delete" icon={Trash2} active={isActive("/scholarships/delete")} />
+            </div>
+          </div>
+          <div className="pt-2">
             <TopNavLink to="/settings/precedence" label="Settings" icon={Settings} active={pathname.startsWith("/settings")} />
           </div>
         </nav>
