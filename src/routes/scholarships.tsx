@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import {
   Dialog,
@@ -39,7 +39,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, MoreHorizontal, History, Search } from "lucide-react";
+import { Plus, MoreHorizontal, History, Search, UserPlus } from "lucide-react";
 import {
   RadioGroup,
   RadioGroupItem,
@@ -151,6 +151,11 @@ function ScholarshipsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem asChild>
+                          <Link to="/assign/$scholarshipId" params={{ scholarshipId: s.id }}>
+                            <UserPlus className="h-3.5 w-3.5" /> Assign to students
+                          </Link>
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setEditing(s)}>Edit</DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setAuditFor(s)}>
                           <History className="h-3.5 w-3.5" /> Audit trail
