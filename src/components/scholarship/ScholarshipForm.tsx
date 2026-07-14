@@ -14,8 +14,11 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Trash2, Plus, Check } from "lucide-react";
-import { SCHOOLS, BATCHES } from "@/lib/scholarship/seed";
+import { SCHOOLS, BATCHES, SEMESTERS, PROGRAMMES } from "@/lib/scholarship/seed";
+import { useStore } from "@/lib/scholarship/store";
 import { coverageSummary } from "./helpers";
+
+const ALL_PROGRAMMES = Array.from(new Set(Object.values(PROGRAMMES).flat()));
 
 const STEPS = ["Basics", "Scope", "Coverage", "Rules", "Governance"] as const;
 type Step = (typeof STEPS)[number];
@@ -31,6 +34,7 @@ export function ScholarshipForm({
   onSubmit: (data: Scholarship, reason: string, migrate: boolean) => void;
   onCancel: () => void;
 }) {
+  const { feeHeads, addFeeHead } = useStore();
   const [step, setStep] = useState<Step>("Basics");
   const [reason, setReason] = useState("");
   const [migrate, setMigrate] = useState(false);
@@ -43,7 +47,8 @@ export function ScholarshipForm({
       schools: [],
       programmes: [],
       batches: [...BATCHES],
-      semesterFrom: 1,
+      semesterFrom: SEMESTERS[0],
+      allSemesters: true,
       reviewCycle: "Annual",
       coverage: [],
       awardRules: [],
@@ -52,13 +57,14 @@ export function ScholarshipForm({
       workStudyHoursPerMonth: 0,
       requiresReapplication: false,
       fundingSource: "Internal",
-      priorityRank: 5,
       status: "Active",
       version: 1,
       effectiveFrom: new Date().toISOString().slice(0, 10),
     },
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [addingFeeHeadFor, setAddingFeeHeadFor] = useState<string | null>(null);
+  const [newFeeHeadName, setNewFeeHeadName] = useState("");
 
   const set = <K extends keyof Scholarship>(k: K, v: Scholarship[K]) =>
     setData((d) => ({ ...d, [k]: v }));
@@ -169,23 +175,24 @@ export function ScholarshipForm({
 
         {step === "Scope" && (
           <div className="space-y-4">
-            <Field label="Schools (leave empty for university-wide)">
+            <Field label="Schools">
               <MultiSelect
                 options={SCHOOLS as unknown as string[]}
                 value={data.schools}
                 onChange={(v) => set("schools", v)}
+                allLabel="All schools"
               />
             </Field>
-            <Field label="Programmes (comma-separated)">
-              <Input
-                value={data.programmes.join(", ")}
-                onChange={(e) =>
-                  set(
-                    "programmes",
-                    e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
-                  )
+            <Field label="Programmes">
+              <MultiSelect
+                options={
+                  data.schools.length === 0
+                    ? ALL_PROGRAMMES
+                    : Array.from(new Set(data.schools.flatMap((sc) => PROGRAMMES[sc] ?? [])))
                 }
-                placeholder="e.g. BS Computer Science, BFA"
+                value={data.programmes}
+                onChange={(v) => set("programmes", v)}
+                allLabel="All programs"
               />
             </Field>
             <Field label="Applicable batches">
@@ -195,13 +202,42 @@ export function ScholarshipForm({
                 onChange={(v) => set("batches", v)}
               />
             </Field>
-            <Field label="Semester from">
-              <Input
-                type="number"
-                min={1}
-                value={data.semesterFrom}
-                onChange={(e) => set("semesterFrom", Number(e.target.value))}
-              />
+            <Field label="Semesters">
+              {data.allSemesters ? (
+                <div className="text-sm text-muted-foreground bg-secondary/60 rounded-md px-3 py-2">All semesters</div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">From</Label>
+                    <Select value={data.semesterFrom} onValueChange={(v) => set("semesterFrom", v)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {SEMESTERS.map((s) => (
+                          <SelectItem key={s} value={s}>{s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Till</Label>
+                    <Select value={data.semesterTill ?? ""} onValueChange={(v) => set("semesterTill", v)}>
+                      <SelectTrigger><SelectValue placeholder="No end date" /></SelectTrigger>
+                      <SelectContent>
+                        {SEMESTERS.map((s) => (
+                          <SelectItem key={s} value={s}>{s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+              <label className="flex items-center gap-2 text-sm mt-2">
+                <Checkbox
+                  checked={!!data.allSemesters}
+                  onCheckedChange={(v) => set("allSemesters", Boolean(v))}
+                />
+                Applies to all semesters
+              </label>
             </Field>
           </div>
         )}
@@ -210,14 +246,27 @@ export function ScholarshipForm({
           <div className="space-y-3">
             {errors.coverage && <p className="text-xs text-destructive">{errors.coverage}</p>}
             {data.coverage.map((c) => (
-              <div key={c.id} className="grid grid-cols-[1fr_1fr_120px_1fr_auto] gap-2 items-end rounded-md border border-border p-3">
+              <div key={c.id} className="rounded-md border border-border p-3 space-y-2">
+                <div className="grid grid-cols-[1fr_1fr_120px_1fr_auto] gap-2 items-end">
                 <Field label="Fee head" small>
-                  <Select value={c.feeHead} onValueChange={(v) => updateLine(setData, c.id, { feeHead: v as any })}>
+                  <Select
+                    value={c.feeHead}
+                    onValueChange={(v) => {
+                      if (v === "__add__") {
+                        setAddingFeeHeadFor(c.id);
+                        return;
+                      }
+                      updateLine(setData, c.id, { feeHead: v as any });
+                    }}
+                  >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {["Tuition", "Hostel", "Mess", "Other"].map((h) => (
+                      {feeHeads.map((h) => (
                         <SelectItem key={h} value={h}>{h}</SelectItem>
                       ))}
+                      <SelectItem value="__add__" className="text-primary">
+                        <span className="inline-flex items-center gap-1"><Plus className="h-3 w-3" /> Add fee head</span>
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
@@ -255,6 +304,41 @@ export function ScholarshipForm({
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
+                </div>
+                {addingFeeHeadFor === c.id && (
+                  <div className="flex items-center gap-2 rounded-md bg-secondary/50 p-2">
+                    <Input
+                      autoFocus
+                      value={newFeeHeadName}
+                      onChange={(e) => setNewFeeHeadName(e.target.value)}
+                      placeholder="e.g. Transport, Library"
+                      className="h-8 text-xs"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        const name = newFeeHeadName.trim();
+                        if (!name) return;
+                        addFeeHead(name);
+                        updateLine(setData, c.id, { feeHead: name });
+                        setAddingFeeHeadFor(null);
+                        setNewFeeHeadName("");
+                      }}
+                    >
+                      Add
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setAddingFeeHeadFor(null);
+                        setNewFeeHeadName("");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                )}
               </div>
             ))}
             <Button
@@ -313,19 +397,24 @@ export function ScholarshipForm({
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="Priority rank (1 = highest)">
-                <Input type="number" min={1} value={data.priorityRank} onChange={(e) => set("priorityRank", Number(e.target.value))} />
-              </Field>
               <Field label="Max duration (years)">
                 <Input type="number" min={1} value={data.maxDurationYears} onChange={(e) => set("maxDurationYears", Number(e.target.value))} />
               </Field>
               <Field label="Work-study hours / month">
                 <Input type="number" min={0} value={data.workStudyHoursPerMonth} onChange={(e) => set("workStudyHoursPerMonth", Number(e.target.value))} />
               </Field>
-              <Field label="Quota per cohort">
-                <Input type="number" min={0} value={data.quotaPerCohort ?? 0} onChange={(e) => set("quotaPerCohort", Number(e.target.value) || undefined)} />
+              <Field label="Quota (optional)" hint="Leave blank for no limit.">
+                <Input
+                  type="number"
+                  min={0}
+                  value={data.quotaPerCohort ?? ""}
+                  onChange={(e) => set("quotaPerCohort", e.target.value === "" ? undefined : Number(e.target.value))}
+                />
               </Field>
             </div>
+            <p className="text-xs text-muted-foreground -mt-2">
+              Precedence between scholarships is now managed on the <span className="font-medium">Settings → Scholarship Precedence</span> page.
+            </p>
             <label className="flex items-center gap-2 text-sm">
               <Checkbox
                 checked={data.requiresReapplication}
@@ -381,7 +470,6 @@ export function ScholarshipForm({
           </div>
           <div className="grid grid-cols-2 gap-2">
             <MiniField label="Study level" value={data.studyLevel} />
-            <MiniField label="Priority" value={String(data.priorityRank)} />
             <MiniField label="Review" value={data.reviewCycle} />
             <MiniField label="Funding" value={data.fundingSource} />
           </div>
@@ -416,17 +504,20 @@ function Field({
   label,
   error,
   small,
+  hint,
   children,
 }: {
   label: string;
   error?: string;
   small?: boolean;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="space-y-1">
       <Label className={small ? "text-[11px] text-muted-foreground" : "text-xs text-muted-foreground"}>{label}</Label>
       {children}
+      {hint && !error && <p className="text-xs text-muted-foreground">{hint}</p>}
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
@@ -445,13 +536,37 @@ function MultiSelect({
   options,
   value,
   onChange,
+  allLabel,
 }: {
   options: string[];
   value: string[];
   onChange: (v: string[]) => void;
+  allLabel?: string;
 }) {
+  const allActive = allLabel != null && value.length === 0;
+  if (allActive) {
+    return (
+      <div className="flex flex-wrap gap-1.5">
+        <button
+          onClick={() => onChange([...options])}
+          className="text-xs px-2.5 py-1 rounded-full border border-primary bg-primary text-primary-foreground transition-colors"
+          title="Click to pick individual schools instead"
+        >
+          {allLabel}
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-wrap gap-1.5">
+      {allLabel != null && (
+        <button
+          onClick={() => onChange([])}
+          className="text-xs px-2.5 py-1 rounded-full border border-border bg-white hover:bg-secondary transition-colors"
+        >
+          {allLabel}
+        </button>
+      )}
       {options.map((o) => {
         const on = value.includes(o);
         return (

@@ -12,6 +12,11 @@ export function coverageBand(pct: number): string {
   return "25%";
 }
 
+export function precedenceOf(scholarships: { id: string }[], scholarshipId: string): number {
+  const i = scholarships.findIndex((s) => s.id === scholarshipId);
+  return i === -1 ? scholarships.length + 1 : i + 1;
+}
+
 export function coverageSummary(
   coverage: { feeHead: string; benefitKind: string; value: number }[],
 ): string {

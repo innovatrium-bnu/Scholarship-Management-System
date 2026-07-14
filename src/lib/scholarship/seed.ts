@@ -46,7 +46,7 @@ for (const [province, cities] of Object.entries(GEOGRAPHY)) {
   }
 }
 
-const PROGRAMMES: Record<string, string[]> = {
+export const PROGRAMMES: Record<string, string[]> = {
   SVAD: ["BFA", "MFA"],
   RHSA: ["BS Architecture", "M.Arch"],
   "School of Science and Technology": ["BS Computer Science", "BS Software Engineering", "BS Math"],
@@ -81,7 +81,8 @@ export function seedScholarships(): Scholarship[] {
     schools: [] as string[],
     programmes: [] as string[],
     batches: [...BATCHES],
-    semesterFrom: 1,
+    semesterFrom: SEMESTERS[0],
+    allSemesters: true,
     awardRules: [],
     retentionRules: [],
     workStudyHoursPerMonth: 0,
@@ -103,7 +104,6 @@ export function seedScholarships(): Scholarship[] {
       maxDurationYears: 4,
       workStudyHoursPerMonth: 8,
       quotaPerCohort: 1,
-      priorityRank: 1,
       status: "Active",
       awardRules: [
         { id: "r1", kind: "Cohort rank", percentile: 1, description: "Top 1 per cohort" },
@@ -122,7 +122,6 @@ export function seedScholarships(): Scholarship[] {
       coverage: [{ id: "cov-d-1", feeHead: "Tuition", benefitKind: "Percentage", value: 100 }],
       maxDurationYears: 4,
       workStudyHoursPerMonth: 8,
-      priorityRank: 2,
       status: "Active",
       retentionRules: [
         { id: "r3", kind: "Automatic", field: "cgpa", operator: ">=", threshold: 3.5 },
@@ -138,7 +137,6 @@ export function seedScholarships(): Scholarship[] {
       coverage: [{ id: "cov-n-1", feeHead: "Tuition", benefitKind: "Percentage", value: 50 }],
       maxDurationYears: 4,
       requiresReapplication: true,
-      priorityRank: 3,
       status: "Active",
     },
     {
@@ -150,10 +148,11 @@ export function seedScholarships(): Scholarship[] {
       reviewCycle: "Every semester",
       coverage: [{ id: "cov-m-1", feeHead: "Tuition", benefitKind: "Percentage", value: 75 }],
       maxDurationYears: 4,
-      priorityRank: 4,
+      semesterFrom: "Fall 2024",
+      allSemesters: false,
       status: "Active",
       awardRules: [
-        { id: "r4", kind: "Cohort rank", percentile: 10, description: "Top 10% per cohort, Fall 2024+" },
+        { id: "r4", kind: "Cohort rank", percentile: 18, description: "Top 18% per cohort, Fall 2024+" },
       ],
     },
     {
@@ -174,7 +173,6 @@ export function seedScholarships(): Scholarship[] {
         },
       ],
       maxDurationYears: 4,
-      priorityRank: 5,
       status: "Active",
     },
     {
@@ -186,7 +184,6 @@ export function seedScholarships(): Scholarship[] {
       reviewCycle: "Every semester",
       coverage: [{ id: "cov-s-1", feeHead: "Tuition", benefitKind: "Percentage", value: 30 }],
       maxDurationYears: 4,
-      priorityRank: 6,
       status: "Active",
     },
     {
@@ -198,7 +195,6 @@ export function seedScholarships(): Scholarship[] {
       reviewCycle: "Annual",
       coverage: [{ id: "cov-i-1", feeHead: "Tuition", benefitKind: "Percentage", value: 25 }],
       maxDurationYears: 4,
-      priorityRank: 7,
       status: "Active",
     },
     {
@@ -212,7 +208,6 @@ export function seedScholarships(): Scholarship[] {
       maxDurationYears: 4,
       fundingSource: "Donor",
       donorName: "Aslam Foundation",
-      priorityRank: 8,
       status: "Active",
       mayExceedCeiling: true,
     },
@@ -408,4 +403,14 @@ export function seedAudit(): AuditEntry[] {
 
 export function seedBatches(): AssignmentBatch[] {
   return [];
+}
+
+export function seedGainedLostBySemester(): { semester: string; gained: number; lost: number }[] {
+  const gained = [14, 19, 23, 27, 31, 12];
+  const lost = [3, 5, 6, 8, 9, 2];
+  return SEMESTERS.map((semester, i) => ({
+    semester,
+    gained: gained[i]!,
+    lost: lost[i]!,
+  }));
 }

@@ -13,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { SCHOOLS, BATCHES } from "@/lib/scholarship/seed";
+import { SCHOOLS, BATCHES, PROGRAMMES } from "@/lib/scholarship/seed";
 import { AlertTriangle, ArrowLeft, ArrowRight, Check, CheckCircle2, Circle, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -58,12 +58,20 @@ function AssignFlow() {
   const [showOnlyConflicts, setShowOnlyConflicts] = useState(false);
   const [committedBatchId, setCommittedBatchId] = useState<string | null>(null);
 
+  const cohortProgrammeOptions = useMemo(() => {
+    const schools = cohort.school !== "all" ? [cohort.school] : SCHOOLS;
+    const set = new Set<string>();
+    for (const sc of schools) for (const p of PROGRAMMES[sc] ?? []) set.add(p);
+    return Array.from(set);
+  }, [cohort.school]);
+
   const targeted: Student[] = useMemo(() => {
     if (!scholarship) return [];
     if (who === "all") return students;
     if (who === "cohort") {
       return students.filter((s) => {
         if (cohort.school !== "all" && s.school !== cohort.school) return false;
+        if (cohort.programme !== "all" && s.programme !== cohort.programme) return false;
         if (cohort.studyLevel !== "all" && s.studyLevel !== cohort.studyLevel) return false;
         if (cohort.batch !== "all" && s.batch !== cohort.batch) return false;
         return true;
@@ -82,8 +90,8 @@ function AssignFlow() {
           : { student: s, status: "Eligible", reasons: [] };
       });
     }
-    return evaluate(scholarship, targeted, awards);
-  }, [scholarship, targeted, awards, how, scholarshipId]);
+    return evaluate(scholarship, targeted, awards, students);
+  }, [scholarship, targeted, awards, how, scholarshipId, students]);
 
   const buckets = useMemo(() => {
     const b: Record<EvalStatus, EvalResult[]> = { Eligible: [], PendingVerification: [], NotEligible: [], AlreadyHolds: [] };
@@ -206,9 +214,10 @@ function AssignFlow() {
               <ChoiceCard active={who === "cohort"} onClick={() => setWho("cohort")} title="A cohort" subtitle="Filter by school, programme, level, batch.">
                 {who === "cohort" && (
                   <div className="grid grid-cols-2 gap-2 mt-3">
-                    <MiniSelect label="School" value={cohort.school} onChange={(v) => setCohort({ ...cohort, school: v })} options={["all", ...SCHOOLS]} />
-                    <MiniSelect label="Batch" value={cohort.batch} onChange={(v) => setCohort({ ...cohort, batch: v })} options={["all", ...BATCHES]} />
+                    <MiniSelect label="School" value={cohort.school} onChange={(v) => setCohort({ ...cohort, school: v, programme: "all" })} options={["all", ...SCHOOLS]} />
+                    <MiniSelect label="Programme" value={cohort.programme} onChange={(v) => setCohort({ ...cohort, programme: v })} options={["all", ...cohortProgrammeOptions]} />
                     <MiniSelect label="Study level" value={cohort.studyLevel} onChange={(v) => setCohort({ ...cohort, studyLevel: v })} options={["all", "Bachelors", "Masters"]} />
+                    <MiniSelect label="Batch" value={cohort.batch} onChange={(v) => setCohort({ ...cohort, batch: v })} options={["all", ...BATCHES]} />
                     <div className="col-span-2 text-xs text-muted-foreground">Targeting <span className="font-medium text-foreground">{targeted.length}</span> students.</div>
                   </div>
                 )}
@@ -305,6 +314,7 @@ function AssignFlow() {
             scholarship={scholarship}
             awards={awards}
             scholarships={scholarships}
+            cohortLabel={who === "cohort" && cohort.batch !== "all" ? cohort.batch : undefined}
           />
         )}
 
@@ -401,7 +411,18 @@ function ChoiceCard({
   children?: React.ReactNode;
 }) {
   return (
-    <button onClick={onClick} className={["w-full text-left rounded-lg border p-4 transition-all", active ? "border-primary bg-primary/5" : "border-border bg-white hover:bg-secondary/40"].join(" ")}>
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      className={["w-full text-left rounded-lg border p-4 transition-all cursor-pointer", active ? "border-primary bg-primary/5" : "border-border bg-white hover:bg-secondary/40"].join(" ")}
+    >
       <div className="flex items-start gap-3">
         <div className={["mt-0.5 h-4 w-4 rounded-full border-2 flex items-center justify-center", active ? "border-primary" : "border-muted-foreground/40"].join(" ")}>
           {active && <div className="h-2 w-2 rounded-full bg-primary" />}
@@ -412,7 +433,7 @@ function ChoiceCard({
           {children}
         </div>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -483,6 +504,7 @@ function ReviewStep(props: {
   scholarship: Scholarship;
   awards: Award[];
   scholarships: Scholarship[];
+  cohortLabel?: string;
 }) {
   const { evaluated, selected, setSelected, conflictSet, resolution, setResolution, showOnlyConflicts, setShowOnlyConflicts, quota, quotaExceeded, scholarship, awards, scholarships } = props;
   const conflictCount = evaluated.filter((r) => conflictSet.has(r.student.regNo) && selected.has(r.student.regNo)).length;
@@ -501,11 +523,17 @@ function ReviewStep(props: {
     setSelected(next);
   };
 
+  const currentAwards = (s: Student) => awards.filter((a) => a.studentRegNo === s.regNo && a.status === "Active");
+
   const totalCoverage = (s: Student) => {
-    const active = awards.filter((a) => a.studentRegNo === s.regNo && a.status === "Active");
-    const merged = computeMerge(s, active, scholarships);
+    const merged = computeMerge(s, currentAwards(s), scholarships);
     return merged.reduce((acc, m) => acc + (m.components.find((c) => c.feeHead === "Tuition")?.appliedPct ?? 0), 0);
   };
+
+  const currentScholarshipNames = (s: Student) =>
+    currentAwards(s)
+      .map((a) => scholarships.find((x) => x.id === a.scholarshipId)?.name)
+      .filter((n): n is string => !!n);
 
   return (
     <div className="space-y-4">
@@ -556,7 +584,7 @@ function ReviewStep(props: {
         <div className="rounded-md border p-4 flex gap-3" style={{ borderColor: "var(--warning-border)", background: "var(--warning-bg)" }}>
           <AlertTriangle className="h-4 w-4 text-[var(--warning)] mt-0.5" />
           <div className="text-sm text-[var(--warning)]">
-            The quota for this scholarship is {quota} per cohort. {evaluated.filter((r) => r.status === "Eligible").length} eligible candidates were found. Sorted by CGPA descending — the batch will cap at the quota.
+            The quota for this scholarship is {quota} per cohort. {evaluated.filter((r) => r.status === "Eligible").length} eligible candidates were found{props.cohortLabel ? ` in ${props.cohortLabel}` : ""}. Sorted by CGPA descending — the batch will cap at the quota.
           </div>
         </div>
       )}
@@ -573,7 +601,8 @@ function ReviewStep(props: {
               <TableHead className="text-right">CGPA</TableHead>
               <TableHead className="text-right">Rank</TableHead>
               <TableHead>Result</TableHead>
-              <TableHead className="text-right">Current coverage</TableHead>
+              <TableHead>Current scholarships</TableHead>
+              <TableHead className="text-right">Resulting total coverage</TableHead>
               <TableHead>Notes</TableHead>
             </TableRow>
           </TableHeader>
@@ -584,6 +613,14 @@ function ReviewStep(props: {
               const cov = totalCoverage(r.student);
               const tuition = scholarship.coverage.find((c) => c.feeHead === "Tuition");
               const add = tuition?.benefitKind === "Full waiver" ? 100 : tuition?.benefitKind === "Percentage" ? tuition.value : 0;
+              const names = currentScholarshipNames(r.student);
+              const resultingTotal = !conflict
+                ? cov + add
+                : resolution === "trim"
+                  ? 100
+                  : resolution === "skip"
+                    ? cov
+                    : cov + add;
               return (
                 <TableRow key={r.student.regNo} className={conflict ? "bg-[var(--warning-bg)]/40" : ""}>
                   <TableCell><Checkbox checked={on} onCheckedChange={() => toggle(r.student.regNo)} /></TableCell>
@@ -594,9 +631,14 @@ function ReviewStep(props: {
                   <TableCell className="text-right tabular text-xs">{r.student.cgpa.toFixed(2)}</TableCell>
                   <TableCell className="text-right tabular text-xs">{r.rank ?? "—"}</TableCell>
                   <TableCell><StatusBadge status={r.status} /></TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {names.length > 0 ? names.join(", ") : "—"}
+                  </TableCell>
                   <TableCell className="text-right tabular text-xs">
-                    {cov > 0 ? `${cov}%` : "—"}
-                    {conflict && <span className="text-[var(--warning)] ml-1">→ {cov + add}%</span>}
+                    {resultingTotal > 0 ? `${resultingTotal}%` : "—"}
+                    {conflict && resolution === "trim" && (
+                      <span className="text-[var(--warning)] ml-1">(trimmed)</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {r.reasons[0] ?? (conflict ? "Ceiling conflict" : "")}
@@ -605,7 +647,7 @@ function ReviewStep(props: {
               );
             })}
             {rows.length === 0 && (
-              <TableRow><TableCell colSpan={10} className="text-center py-8 text-xs text-muted-foreground">No candidates.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={11} className="text-center py-8 text-xs text-muted-foreground">No candidates.</TableCell></TableRow>
             )}
           </TableBody>
         </Table>

@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { SCHOOLS, BATCHES } from "@/lib/scholarship/seed";
+import { SCHOOLS, BATCHES, GEOGRAPHY } from "@/lib/scholarship/seed";
 import {
   Select,
   SelectContent,
@@ -21,19 +21,37 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, ArrowRight } from "lucide-react";
+import { Search, ArrowRight, X } from "lucide-react";
 
-type S = {
-  school?: string;
-  batch?: string;
-  studyLevel?: string;
-  scholarshipId?: string;
-  band?: string;
-  funding?: string;
-  status?: string;
+type Filters = {
+  school: string;
+  batch: string;
+  studyLevel: string;
+  scholarshipId: string;
+  band: string;
+  funding: string;
+  status: string;
+  province: string;
+  city: string;
+  district: string;
 };
 
-export const Route = createFileRoute("/students")({
+const DEFAULT: Filters = {
+  school: "all",
+  batch: "all",
+  studyLevel: "all",
+  scholarshipId: "all",
+  band: "all",
+  funding: "all",
+  status: "all",
+  province: "all",
+  city: "all",
+  district: "all",
+};
+
+type S = Partial<Filters>;
+
+export const Route = createFileRoute("/students/")({
   component: StudentsPage,
   validateSearch: (s: Record<string, unknown>): S => ({
     school: s.school as string | undefined,
@@ -43,6 +61,9 @@ export const Route = createFileRoute("/students")({
     band: s.band as string | undefined,
     funding: s.funding as string | undefined,
     status: s.status as string | undefined,
+    province: s.province as string | undefined,
+    city: s.city as string | undefined,
+    district: s.district as string | undefined,
   }),
   head: () => ({
     meta: [
@@ -54,19 +75,35 @@ export const Route = createFileRoute("/students")({
 
 function StudentsPage() {
   const { students, awards, scholarships } = useStore();
-  const search = useSearch({ from: "/students" });
+  const search = useSearch({ from: "/students/" });
   const [q, setQ] = useState("");
-  const [school, setSchool] = useState(search.school ?? "all");
-  const [batch, setBatch] = useState(search.batch ?? "all");
-  const [studyLevel, setStudyLevel] = useState(search.studyLevel ?? "all");
   const [onlyScholars, setOnlyScholars] = useState(!!search.scholarshipId);
+  const [f, setF] = useState<Filters>({
+    school: search.school ?? DEFAULT.school,
+    batch: search.batch ?? DEFAULT.batch,
+    studyLevel: search.studyLevel ?? DEFAULT.studyLevel,
+    scholarshipId: search.scholarshipId ?? DEFAULT.scholarshipId,
+    band: search.band ?? DEFAULT.band,
+    funding: search.funding ?? DEFAULT.funding,
+    status: search.status ?? DEFAULT.status,
+    province: search.province ?? DEFAULT.province,
+    city: search.city ?? DEFAULT.city,
+    district: search.district ?? DEFAULT.district,
+  });
+
+  const set = (k: keyof Filters, v: string) => setF((s) => ({ ...s, [k]: v }));
+
+  const fundingOf = (scholarshipId: string) => scholarships.find((sc) => sc.id === scholarshipId)?.fundingSource;
 
   const rows = useMemo(() => {
     return students
       .filter((s) => {
-        if (school !== "all" && s.school !== school) return false;
-        if (batch !== "all" && s.batch !== batch) return false;
-        if (studyLevel !== "all" && s.studyLevel !== studyLevel) return false;
+        if (f.school !== "all" && s.school !== f.school) return false;
+        if (f.batch !== "all" && s.batch !== f.batch) return false;
+        if (f.studyLevel !== "all" && s.studyLevel !== f.studyLevel) return false;
+        if (f.province !== "all" && s.province !== f.province) return false;
+        if (f.city !== "all" && s.city !== f.city) return false;
+        if (f.district !== "all" && s.district !== f.district) return false;
         if (q && !`${s.name} ${s.regNo}`.toLowerCase().includes(q.toLowerCase())) return false;
         return true;
       })
@@ -78,15 +115,21 @@ function StudentsPage() {
           return acc + (t?.appliedPct ?? 0);
         }, 0);
         const anyTrimmed = merged.some((m) => m.components.some((c) => c.mergeStatus === "Trimmed"));
-        return { s, active, totalTuition, anyTrimmed };
+        const matchingAwards = awards.filter((a) => {
+          if (a.studentRegNo !== s.regNo) return false;
+          if (f.status !== "all" && a.status !== f.status) return false;
+          if (f.scholarshipId !== "all" && a.scholarshipId !== f.scholarshipId) return false;
+          if (f.funding !== "all" && fundingOf(a.scholarshipId) !== f.funding) return false;
+          return true;
+        });
+        return { s, active, totalTuition, anyTrimmed, matchingAwards };
       })
       .filter((r) => {
-        if (onlyScholars && r.active.length === 0) return false;
-        if (search.scholarshipId && !r.active.some((a) => a.scholarshipId === search.scholarshipId))
+        if (onlyScholars && r.matchingAwards.length === 0) return false;
+        if ((f.scholarshipId !== "all" || f.funding !== "all" || f.status !== "all") && r.matchingAwards.length === 0)
           return false;
-        if (search.band) {
+        if (f.band !== "all") {
           const b = r.totalTuition;
-          const target = search.band;
           const map: Record<string, [number, number]> = {
             "25%": [1, 34.99],
             "35%": [35, 49.99],
@@ -94,12 +137,18 @@ function StudentsPage() {
             "75%": [75, 99.99],
             "100%": [100, 999],
           };
-          const [lo, hi] = map[target] ?? [0, 999];
+          const [lo, hi] = map[f.band] ?? [0, 999];
           if (!(b >= lo && b <= hi)) return false;
         }
         return true;
       });
-  }, [students, awards, scholarships, q, school, batch, studyLevel, onlyScholars, search]);
+  }, [students, awards, scholarships, q, f, onlyScholars]);
+
+  const activeChips = (Object.entries(f) as [keyof Filters, string][]).filter(([k, v]) => v !== DEFAULT[k]);
+  const clear = (k: keyof Filters) => set(k, DEFAULT[k]);
+
+  const cities = f.province === "all" ? [] : Object.keys(GEOGRAPHY[f.province] ?? {});
+  const districts = f.province === "all" || f.city === "all" ? [] : GEOGRAPHY[f.province]?.[f.city] ?? [];
 
   return (
     <>
@@ -113,9 +162,32 @@ function StudentsPage() {
             <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name or reg no" className="pl-9 bg-white" />
           </div>
-          <Filter label="School" value={school} onChange={setSchool} options={["all", ...SCHOOLS]} />
-          <Filter label="Batch" value={batch} onChange={setBatch} options={["all", ...BATCHES]} />
-          <Filter label="Study level" value={studyLevel} onChange={setStudyLevel} options={["all", "Bachelors", "Masters"]} />
+          <Filter label="School" value={f.school} onChange={(v) => set("school", v)} options={["all", ...SCHOOLS]} />
+          <Filter label="Batch" value={f.batch} onChange={(v) => set("batch", v)} options={["all", ...BATCHES]} />
+          <Filter label="Study level" value={f.studyLevel} onChange={(v) => set("studyLevel", v)} options={["all", "Bachelors", "Masters"]} />
+          <Filter
+            label="Scholarship"
+            value={f.scholarshipId}
+            onChange={(v) => set("scholarshipId", v)}
+            options={["all", ...scholarships.map((s) => s.id)]}
+            labels={{ all: "All", ...Object.fromEntries(scholarships.map((s) => [s.id, s.name])) }}
+          />
+          <Filter label="Coverage band" value={f.band} onChange={(v) => set("band", v)} options={["all", "25%", "35%", "50%", "75%", "100%"]} />
+          <Filter label="Funding" value={f.funding} onChange={(v) => set("funding", v)} options={["all", "Internal", "Donor"]} />
+          <Filter label="Status" value={f.status} onChange={(v) => set("status", v)} options={["all", "Active", "Revoked"]} />
+          <Filter
+            label="Province"
+            value={f.province}
+            onChange={(v) => setF((s) => ({ ...s, province: v, city: "all", district: "all" }))}
+            options={["all", ...Object.keys(GEOGRAPHY)]}
+          />
+          <Filter
+            label="City"
+            value={f.city}
+            onChange={(v) => setF((s) => ({ ...s, city: v, district: "all" }))}
+            options={["all", ...cities]}
+          />
+          <Filter label="District" value={f.district} onChange={(v) => set("district", v)} options={["all", ...districts]} />
           <button
             onClick={() => setOnlyScholars((v) => !v)}
             className={[
@@ -127,6 +199,22 @@ function StudentsPage() {
           </button>
           <div className="ml-auto text-xs text-muted-foreground">{rows.length} students</div>
         </div>
+
+        {activeChips.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {activeChips.map(([k, v]) => (
+              <button
+                key={k}
+                onClick={() => clear(k)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-2.5 py-1 text-xs text-foreground hover:bg-secondary"
+              >
+                <span className="text-muted-foreground">{k}:</span>{" "}
+                {k === "scholarshipId" ? scholarships.find((s) => s.id === v)?.name ?? v : v}
+                <X className="h-3 w-3" />
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="rounded-lg border border-border bg-white overflow-hidden">
           <Table>
@@ -200,11 +288,13 @@ function Filter({
   value,
   onChange,
   options,
+  labels,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: readonly string[];
+  labels?: Record<string, string>;
 }) {
   return (
     <div className="flex items-center gap-1.5">
@@ -216,7 +306,7 @@ function Filter({
         <SelectContent>
           {options.map((o) => (
             <SelectItem key={o} value={o} className="text-xs">
-              {o === "all" ? "All" : o}
+              {labels?.[o] ?? (o === "all" ? "All" : o)}
             </SelectItem>
           ))}
         </SelectContent>

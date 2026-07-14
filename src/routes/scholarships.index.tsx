@@ -47,7 +47,7 @@ import {
 import { Label } from "@/components/ui/label";
 import type { Scholarship } from "@/lib/scholarship/types";
 
-export const Route = createFileRoute("/scholarships")({
+export const Route = createFileRoute("/scholarships/")({
   component: ScholarshipsPage,
   head: () => ({
     meta: [
@@ -75,8 +75,7 @@ function ScholarshipsPage() {
         ...s,
         activeAwards: awards.filter((a) => a.scholarshipId === s.id && a.status === "Active").length,
         totalAwards: awards.filter((a) => a.scholarshipId === s.id).length,
-      }))
-      .sort((a, b) => a.priorityRank - b.priorityRank);
+      }));
   }, [scholarships, awards, q]);
 
   return (
@@ -111,7 +110,6 @@ function ScholarshipsPage() {
                 <TableHead>Name</TableHead>
                 <TableHead>Study level</TableHead>
                 <TableHead>Coverage</TableHead>
-                <TableHead className="text-right">Priority</TableHead>
                 <TableHead>Review</TableHead>
                 <TableHead>Funding</TableHead>
                 <TableHead>Status</TableHead>
@@ -123,12 +121,13 @@ function ScholarshipsPage() {
               {rows.map((s) => (
                 <TableRow key={s.id}>
                   <TableCell>
-                    <div className="font-medium">{s.name}</div>
+                    <Link to="/scholarships/$id" params={{ id: s.id }} className="font-medium hover:text-primary">
+                      {s.name}
+                    </Link>
                     <div className="text-xs text-muted-foreground line-clamp-1">{s.description}</div>
                   </TableCell>
                   <TableCell className="text-sm">{s.studyLevel}</TableCell>
                   <TableCell className="text-sm">{coverageSummary(s.coverage)}</TableCell>
-                  <TableCell className="text-right tabular text-sm">{s.priorityRank}</TableCell>
                   <TableCell className="text-sm">{s.reviewCycle}</TableCell>
                   <TableCell className="text-sm">
                     {s.fundingSource}
@@ -152,7 +151,7 @@ function ScholarshipsPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem asChild>
-                          <Link to="/assign/$scholarshipId" params={{ scholarshipId: s.id }}>
+                          <Link to="/assign/$scholarshipId" params={{ scholarshipId: s.id }} search={{ student: undefined }}>
                             <UserPlus className="h-3.5 w-3.5" /> Assign to students
                           </Link>
                         </DropdownMenuItem>
@@ -196,7 +195,7 @@ function ScholarshipsPage() {
               ))}
               {rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-12">
+                  <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-12">
                     No scholarships found.
                   </TableCell>
                 </TableRow>
@@ -249,7 +248,7 @@ function ScholarshipsPage() {
               <RadioGroupItem value="end_all" id="end_all" className="mt-0.5" />
               <div>
                 <Label htmlFor="end_all" className="font-medium">End existing awards from Fall 2025</Label>
-                <p className="text-xs text-muted-foreground">All active awards will move to Expired.</p>
+                <p className="text-xs text-muted-foreground">All active awards will move to Revoked.</p>
               </div>
             </label>
           </RadioGroup>

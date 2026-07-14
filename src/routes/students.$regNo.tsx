@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useParams } from "@tanstack/react-router";
+import { createFileRoute, Link, useParams, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/scholarship/AppShell";
 import { useStore } from "@/lib/scholarship/store";
@@ -49,10 +49,16 @@ import {
   History,
   Pin,
   Plus,
+  UserPlus,
   XCircle,
 } from "lucide-react";
 import { AuditPanel } from "@/components/scholarship/AuditPanel";
-import { pkr } from "@/components/scholarship/helpers";
+import { pkr, precedenceOf } from "@/components/scholarship/helpers";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 export const Route = createFileRoute("/students/$regNo")({
   component: StudentDetail,
@@ -70,9 +76,11 @@ const GREYS = ["#374151", "#6B7280", "#9CA3AF", "#D1D5DB"];
 
 function StudentDetail() {
   const { regNo } = useParams({ from: "/students/$regNo" });
+  const nav = useNavigate();
   const { students, awards, scholarships, addAward, revokeAward } = useStore();
   const student = students.find((s) => s.regNo === regNo);
   const [addOpen, setAddOpen] = useState(false);
+  const [assignPickerOpen, setAssignPickerOpen] = useState(false);
   const [revokeFor, setRevokeFor] = useState<Award | null>(null);
   const [auditOpen, setAuditOpen] = useState(false);
   const [restoredIds, setRestoredIds] = useState<Set<string>>(new Set());
@@ -114,6 +122,35 @@ function StudentDetail() {
             <Button variant="outline" onClick={() => setAuditOpen(true)}>
               <History className="h-4 w-4" /> Audit
             </Button>
+            <Popover open={assignPickerOpen} onOpenChange={setAssignPickerOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline">
+                  <UserPlus className="h-4 w-4" /> Assign scholarship
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-72 p-2">
+                <div className="text-xs text-muted-foreground px-1 pb-1.5">
+                  Pick a scholarship to run the full eligibility & assignment flow for this student.
+                </div>
+                <div className="max-h-64 overflow-auto space-y-0.5">
+                  {eligible.length === 0 && (
+                    <div className="px-2 py-2 text-xs text-muted-foreground">No further scholarships apply.</div>
+                  )}
+                  {eligible.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => {
+                        setAssignPickerOpen(false);
+                        nav({ to: "/assign/$scholarshipId", params: { scholarshipId: s.id }, search: { student: student.regNo } });
+                      }}
+                      className="w-full text-left rounded-md px-2 py-1.5 text-sm hover:bg-secondary/60"
+                    >
+                      {s.name}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
             <Button onClick={() => setAddOpen(true)}>
               <Plus className="h-4 w-4" /> Add scholarship
             </Button>
@@ -147,6 +184,7 @@ function StudentDetail() {
                       merged={m}
                       restored={restoredIds.has(m.award.id)}
                       onRevoke={() => setRevokeFor(m.award)}
+                      precedence={precedenceOf(scholarships, m.scholarship.id)}
                     />
                   ))}
                 </div>
@@ -163,6 +201,7 @@ function StudentDetail() {
                     head={head}
                     merged={merged}
                     baseFee={feeOf(student, head)}
+                    scholarships={scholarships}
                   />
                 ))}
               </div>
@@ -171,7 +210,7 @@ function StudentDetail() {
             {/* Merge breakdown */}
             <section>
               <div className="text-sm font-medium mb-3">Merge breakdown — Tuition</div>
-              <MergeTable merged={merged} feeHead="Tuition" />
+              <MergeTable merged={merged} feeHead="Tuition" scholarships={scholarships} />
             </section>
           </div>
 
@@ -267,10 +306,12 @@ function AwardCard({
   merged,
   restored,
   onRevoke,
+  precedence,
 }: {
   merged: MergedAward;
   restored: boolean;
   onRevoke: () => void;
+  precedence: number;
 }) {
   const { award, scholarship, components } = merged;
   const anyTrimmed = components.some((c) => c.mergeStatus === "Trimmed");
@@ -288,7 +329,10 @@ function AwardCard({
             <div className="font-medium truncate">{scholarship.name}</div>
             <span className="text-[10px] text-muted-foreground shrink-0">v{award.scholarshipVersion}</span>
           </div>
-          <div className="text-[11px] text-muted-foreground">Priority {scholarship.priorityRank}</div>
+          <div className="text-[11px] text-muted-foreground">
+            Precedence #{precedence}
+            {scholarship.fundingSource === "Donor" && scholarship.donorName ? ` · ${scholarship.donorName}` : ""}
+          </div>
         </div>
         <div className="flex flex-col items-end gap-1">
           {anyTrimmed && (
@@ -360,10 +404,12 @@ function CoverageBar({
   head,
   merged,
   baseFee,
+  scholarships,
 }: {
   head: "Tuition" | "Hostel" | "Mess" | "Other";
   merged: MergedAward[];
   baseFee: number;
+  scholarships: Scholarship[];
 }) {
   // Percent-based bar. Fixed amounts are added as a separate strip below.
   const segments = merged
@@ -373,7 +419,7 @@ function CoverageBar({
       return { m, c };
     })
     .filter((x): x is { m: MergedAward; c: MergedAward["components"][number] } => !!x)
-    .sort((a, b) => a.m.scholarship.priorityRank - b.m.scholarship.priorityRank);
+    .sort((a, b) => precedenceOf(scholarships, a.m.scholarship.id) - precedenceOf(scholarships, b.m.scholarship.id));
 
   const pctSegments = segments.filter((s) => s.c.kind !== "Fixed amount" && s.c.appliedPct > 0);
   const fixedSegments = segments.filter((s) => s.c.kind === "Fixed amount" && s.c.appliedPKR > 0);
@@ -432,9 +478,11 @@ function CoverageBar({
 function MergeTable({
   merged,
   feeHead,
+  scholarships,
 }: {
   merged: MergedAward[];
   feeHead: "Tuition" | "Hostel" | "Mess" | "Other";
+  scholarships: Scholarship[];
 }) {
   const rows = merged
     .map((m) => {
@@ -443,7 +491,7 @@ function MergeTable({
       return { m, c };
     })
     .filter((x): x is { m: MergedAward; c: MergedAward["components"][number] } => !!x)
-    .sort((a, b) => a.m.scholarship.priorityRank - b.m.scholarship.priorityRank);
+    .sort((a, b) => precedenceOf(scholarships, a.m.scholarship.id) - precedenceOf(scholarships, b.m.scholarship.id));
 
   const totalEnt = rows.reduce((a, r) => a + (r.c.kind === "Fixed amount" ? 0 : r.c.entitlementPct), 0);
   const totalApp = rows.reduce((a, r) => a + (r.c.kind === "Fixed amount" ? 0 : r.c.appliedPct), 0);
@@ -458,7 +506,7 @@ function MergeTable({
         <TableHeader>
           <TableRow>
             <TableHead>Scholarship</TableHead>
-            <TableHead className="text-right">Priority</TableHead>
+            <TableHead className="text-right">Precedence</TableHead>
             <TableHead className="text-right">Entitlement</TableHead>
             <TableHead className="text-right">Applied</TableHead>
             <TableHead>Status</TableHead>
@@ -467,8 +515,13 @@ function MergeTable({
         <TableBody>
           {rows.map(({ m, c }) => (
             <TableRow key={m.award.id}>
-              <TableCell className="font-medium">{m.scholarship.name}</TableCell>
-              <TableCell className="text-right tabular">{m.scholarship.priorityRank}</TableCell>
+              <TableCell className="font-medium">
+                {m.scholarship.name}
+                {m.scholarship.fundingSource === "Donor" && m.scholarship.donorName ? (
+                  <span className="text-muted-foreground font-normal"> · {m.scholarship.donorName}</span>
+                ) : null}
+              </TableCell>
+              <TableCell className="text-right tabular">{precedenceOf(scholarships, m.scholarship.id)}</TableCell>
               <TableCell className="text-right tabular">{c.kind === "Fixed amount" ? pkr(c.entitlementPKR) : `${c.entitlementPct}%`}</TableCell>
               <TableCell className="text-right tabular">{c.kind === "Fixed amount" ? pkr(c.appliedPKR) : `${c.appliedPct}%`}</TableCell>
               <TableCell>
@@ -596,7 +649,7 @@ function AddScholarshipDialog({
               <SelectContent>
                 {eligible.map((s) => (
                   <SelectItem key={s.id} value={s.id}>
-                    {s.name} · priority {s.priorityRank}
+                    {s.name} · precedence #{precedenceOf(scholarships, s.id)}
                   </SelectItem>
                 ))}
                 {eligible.length === 0 && (
@@ -627,7 +680,7 @@ function AddScholarshipDialog({
 
               <div>
                 <div className="text-xs font-medium mb-1.5">Live merge preview — Tuition</div>
-                {preview && <MergeTable merged={preview} feeHead="Tuition" />}
+                {preview && <MergeTable merged={preview} feeHead="Tuition" scholarships={scholarships} />}
               </div>
 
               {hasBreach && (

@@ -40,6 +40,7 @@ export function evaluate(
   scholarship: Scholarship,
   students: Student[],
   existingAwards: Award[],
+  rankingPopulation: Student[] = students,
 ): EvalResult[] {
   const held = new Set(
     existingAwards
@@ -51,15 +52,19 @@ export function evaluate(
   const inScope = (s: Student) => {
     if (scholarship.studyLevel !== "Both" && scholarship.studyLevel !== s.studyLevel) return `Study level (requires ${scholarship.studyLevel})`;
     if (scholarship.schools.length > 0 && !scholarship.schools.includes(s.school)) return `School not eligible (requires one of ${scholarship.schools.join(", ")})`;
+    if (scholarship.programmes.length > 0 && !scholarship.programmes.includes(s.programme)) return `Programme not eligible (requires one of ${scholarship.programmes.join(", ")})`;
     if (scholarship.batches.length > 0 && !scholarship.batches.includes(s.batch)) return `Batch not eligible`;
     return null;
   };
 
-  // Cohort rank rule
+  // Cohort rank rule — ranked against the FULL cohort that passes scope, not just
+  // whichever subset of students is being targeted for this assignment run. This
+  // matters when targeting a single student: they must be ranked against their
+  // whole cohort, not a population of one.
   const cohortRule = scholarship.awardRules.find((r) => r.kind === "Cohort rank");
   let rankMap = new Map<string, { rank: number; percentile: number }>();
   if (cohortRule) {
-    const eligibleForRanking = students.filter((s) => !inScope(s));
+    const eligibleForRanking = rankingPopulation.filter((s) => !inScope(s));
     const sorted = [...eligibleForRanking].sort((a, b) => b.cgpa - a.cgpa);
     sorted.forEach((s, i) => {
       const percentile = sorted.length > 0 ? ((i + 1) / sorted.length) * 100 : 100;

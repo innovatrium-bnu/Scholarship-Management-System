@@ -32,8 +32,8 @@ export interface Scholarship {
   schools: string[];
   programmes: string[];
   batches: string[];
-  semesterFrom: number;
-  semesterTill?: number;
+  semesterFrom: string;
+  semesterTill?: string;
   allSemesters?: boolean;
   reviewCycle: ReviewCycle;
   coverage: CoverageLine[];
@@ -45,7 +45,6 @@ export interface Scholarship {
   fundingSource: "Internal" | "Donor";
   donorName?: string;
   quotaPerCohort?: number;
-  priorityRank: number;
   status: "Active" | "Archived";
   version: number;
   effectiveFrom: string;

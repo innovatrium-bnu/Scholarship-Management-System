@@ -19,7 +19,7 @@ import { PageHeader } from "@/components/scholarship/AppShell";
 import { useStore } from "@/lib/scholarship/store";
 import { computeMerge, waiverValuePKR } from "@/lib/scholarship/merge";
 import { pkr } from "@/components/scholarship/helpers";
-import { SCHOOLS, BATCHES } from "@/lib/scholarship/seed";
+import { SCHOOLS, BATCHES, GEOGRAPHY, seedGainedLostBySemester } from "@/lib/scholarship/seed";
 import {
   Select,
   SelectContent,
@@ -48,6 +48,9 @@ type Filters = {
   band: string;
   funding: string;
   status: string;
+  province: string;
+  city: string;
+  district: string;
 };
 
 const EMPTY: Filters = {
@@ -58,6 +61,9 @@ const EMPTY: Filters = {
   band: "all",
   funding: "all",
   status: "Active",
+  province: "all",
+  city: "all",
+  district: "all",
 };
 
 const TEAL = "#0D9488";
@@ -73,6 +79,9 @@ function Dashboard() {
       if (f.school !== "all" && s.school !== f.school) return false;
       if (f.batch !== "all" && s.batch !== f.batch) return false;
       if (f.studyLevel !== "all" && s.studyLevel !== f.studyLevel) return false;
+      if (f.province !== "all" && s.province !== f.province) return false;
+      if (f.city !== "all" && s.city !== f.city) return false;
+      if (f.district !== "all" && s.district !== f.district) return false;
       return true;
     });
   }, [students, f]);
@@ -180,14 +189,7 @@ function Dashboard() {
     return SCHOOLS.map((sc) => ({ school: sc.split(" ").slice(0, 2).join(" "), ...perSchool[sc] }));
   }, [uniqueScholarRegs, students, awards, scholarships]);
 
-  const gainedLost = useMemo(() => {
-    const months = ["Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep"];
-    return months.map((m, i) => ({
-      month: m,
-      gained: 3 + ((i * 7) % 9),
-      lost: 1 + ((i * 3) % 4),
-    }));
-  }, []);
+  const gainedLost = useMemo(() => seedGainedLostBySemester(), []);
 
   const bandDist = useMemo(() => {
     const bands = new Map<string, number>([
@@ -352,11 +354,17 @@ function Dashboard() {
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="Awards gained vs lost (12 months)">
+          <ChartCard title="Scholarships gained vs lost">
             <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={gainedLost} margin={{ left: 8, right: 8, top: 8, bottom: 8 }}>
+              <BarChart data={gainedLost} margin={{ left: 8, right: 8, top: 8, bottom: 40 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#EEE" />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#6B7280" }} />
+                <XAxis
+                  dataKey="semester"
+                  tick={{ fontSize: 10, fill: "#6B7280" }}
+                  angle={-20}
+                  textAnchor="end"
+                  height={50}
+                />
                 <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} />
                 <RTooltip />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -427,6 +435,10 @@ function FilterBar({
   scholarships: { id: string; name: string }[];
 }) {
   const set = (k: keyof Filters, v: string) => setF((s) => ({ ...s, [k]: v }));
+
+  const cities = f.province === "all" ? [] : Object.keys(GEOGRAPHY[f.province] ?? {});
+  const districts = f.province === "all" || f.city === "all" ? [] : GEOGRAPHY[f.province]?.[f.city] ?? [];
+
   return (
     <div className="sticky top-[73px] z-10 -mx-8 px-8 py-3 bg-background/85 backdrop-blur border-b border-border">
       <div className="flex flex-wrap gap-2 items-center">
@@ -442,7 +454,20 @@ function FilterBar({
         />
         <FilterSelect label="Coverage band" value={f.band} onChange={(v) => set("band", v)} options={["all", "25%", "35%", "50%", "75%", "100%"]} />
         <FilterSelect label="Funding" value={f.funding} onChange={(v) => set("funding", v)} options={["all", "Internal", "Donor"]} />
-        <FilterSelect label="Status" value={f.status} onChange={(v) => set("status", v)} options={["all", "Active", "Suspended", "Revoked", "Expired"]} />
+        <FilterSelect label="Status" value={f.status} onChange={(v) => set("status", v)} options={["all", "Active", "Revoked"]} />
+        <FilterSelect
+          label="Province"
+          value={f.province}
+          onChange={(v) => setF((s) => ({ ...s, province: v, city: "all", district: "all" }))}
+          options={["all", ...Object.keys(GEOGRAPHY)]}
+        />
+        <FilterSelect
+          label="City"
+          value={f.city}
+          onChange={(v) => setF((s) => ({ ...s, city: v, district: "all" }))}
+          options={["all", ...cities]}
+        />
+        <FilterSelect label="District" value={f.district} onChange={(v) => set("district", v)} options={["all", ...districts]} />
         <Badge variant="outline" className="ml-auto font-normal text-muted-foreground">
           Filters apply to every panel
         </Badge>

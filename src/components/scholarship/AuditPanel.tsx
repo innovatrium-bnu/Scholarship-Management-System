@@ -1,7 +1,9 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 import { useStore } from "@/lib/scholarship/store";
 import { formatDistanceToNow } from "date-fns";
-import { History, User, FileText, Pencil, Trash2, ShieldCheck, XCircle, Award } from "lucide-react";
+import { History, User, FileText, Pencil, Trash2, ShieldCheck, XCircle, Award, Undo2 } from "lucide-react";
+import { toast } from "sonner";
 
 export function AuditPanel({
   open,
@@ -16,14 +18,22 @@ export function AuditPanel({
   entityId?: string;
   studentRegNo?: string;
 }) {
-  const { audit, awards } = useStore();
+  const { audit, awards, batches, undoBatch } = useStore();
   const relevant = audit.filter((e) => {
     if (entityType && e.entityType === entityType && e.entityId === entityId) return true;
+    if (entityType === "Scholarship" && e.entityType === "Batch") {
+      const b = batches.find((x) => x.id === e.entityId);
+      if (b?.scholarshipId === entityId) return true;
+    }
     if (studentRegNo) {
       if (e.entityType === "Student" && e.entityId === studentRegNo) return true;
       if (e.entityType === "Award") {
         const a = awards.find((x) => x.id === e.entityId);
         if (a?.studentRegNo === studentRegNo) return true;
+      }
+      if (e.entityType === "Batch") {
+        const b = batches.find((x) => x.id === e.entityId);
+        if (b?.awardIds.some((id) => awards.find((a) => a.id === id)?.studentRegNo === studentRegNo)) return true;
       }
     }
     return false;
@@ -43,6 +53,7 @@ export function AuditPanel({
           ) : (
             relevant.map((e) => {
               const Icon = pickIcon(e.action);
+              const batch = e.entityType === "Batch" ? batches.find((b) => b.id === e.entityId) : undefined;
               return (
                 <div key={e.id} className="flex gap-3 rounded-md border border-border p-3">
                   <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
@@ -60,6 +71,24 @@ export function AuditPanel({
                     </div>
                     {e.reason && (
                       <div className="text-xs mt-1.5 text-foreground/80">Reason: {e.reason}</div>
+                    )}
+                    {batch && (
+                      <div className="mt-2">
+                        {batch.undone ? (
+                          <span className="text-xs text-muted-foreground">Batch undone.</span>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              undoBatch(batch.id);
+                              toast.success(`Batch ${batch.id} undone — ${batch.awardIds.length} awards removed.`);
+                            }}
+                          >
+                            <Undo2 className="h-3.5 w-3.5" /> Undo this batch
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
