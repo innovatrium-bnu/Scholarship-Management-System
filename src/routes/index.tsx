@@ -66,8 +66,8 @@ const EMPTY: Filters = {
   district: "all",
 };
 
-const PRIMARY = "#1B6C8C";
-const GREY = ["#14556E", "#6B7C8C", "#93C1D4", "#AEC4CF", "#CBD8E0", "#E6ECF1"];
+const SERIES = ["#1B6C8C", "#E8663C", "#2FAE7E", "#F0B429", "#93C1D4"];
+const PRIMARY = SERIES[0];
 
 function Dashboard() {
   const { students, awards, scholarships } = useStore();
@@ -279,12 +279,13 @@ function Dashboard() {
                   {byType.map((_, i) => (
                     <Cell
                       key={i}
-                      fill={i === 0 ? PRIMARY : GREY[(i - 1) % GREY.length]}
+                      fill={SERIES[i % SERIES.length]}
                       cursor="pointer"
                     />
                   ))}
                 </Pie>
                 <RTooltip />
+                <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
               </PieChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -347,9 +348,9 @@ function Dashboard() {
                 <YAxis tick={{ fontSize: 10, fill: "#6B7C8C" }} tickFormatter={(v) => `${(v / 1e6).toFixed(1)}M`} />
                 <RTooltip formatter={(v: number) => pkr(v)} />
                 <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
-                <Bar dataKey="Tuition" stackId="a" fill={PRIMARY} />
-                <Bar dataKey="Hostel" stackId="a" fill={GREY[2]} />
-                <Bar dataKey="Other" stackId="a" fill={GREY[4]} />
+                <Bar dataKey="Tuition" stackId="a" fill={SERIES[0]} />
+                <Bar dataKey="Hostel" stackId="a" fill={SERIES[1]} />
+                <Bar dataKey="Other" stackId="a" fill={SERIES[2]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -368,8 +369,8 @@ function Dashboard() {
                 <YAxis tick={{ fontSize: 11, fill: "#6B7C8C" }} />
                 <RTooltip />
                 <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
-                <Bar dataKey="gained" fill={PRIMARY} radius={[3, 3, 0, 0]} />
-                <Bar dataKey="lost" fill={GREY[3]} radius={[3, 3, 0, 0]} />
+                <Bar dataKey="gained" fill={SERIES[0]} radius={[3, 3, 0, 0]} />
+                <Bar dataKey="lost" fill={SERIES[1]} radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>

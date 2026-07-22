@@ -62,7 +62,7 @@ function TopNavLink({ to, label, icon: Icon, active }: { to: string; label: stri
         "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors border-l-2",
         active
           ? "bg-primary-tint text-primary font-semibold border-l-primary"
-          : "text-foreground/75 border-l-transparent hover:bg-primary-tint/60 hover:text-foreground",
+          : "text-foreground/75 border-l-transparent hover:bg-primary-tint hover:text-primary hover:font-semibold hover:border-l-primary",
       ].join(" ")}
     >
       <Icon className="h-4 w-4" strokeWidth={active ? 2.25 : 2} />
@@ -80,7 +80,7 @@ function SubNavLink({ to, label, icon: Icon, active, exact }: { to: string; labe
         "flex items-center gap-2 px-3 py-1.5 rounded-md text-[13px] transition-colors border-l-2",
         active
           ? "bg-primary-tint text-primary font-semibold border-l-primary"
-          : "text-foreground/70 border-l-transparent hover:bg-primary-tint/60 hover:text-foreground",
+          : "text-foreground/70 border-l-transparent hover:bg-primary-tint hover:text-primary hover:font-semibold hover:border-l-primary",
       ].join(" ")}
     >
       <Icon className="h-3.5 w-3.5" strokeWidth={active ? 2.25 : 2} />
