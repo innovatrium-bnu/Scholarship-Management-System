@@ -11,13 +11,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       <aside className="w-60 shrink-0 border-r border-border bg-[var(--surface)] flex flex-col">
         <div className="h-16 flex items-center px-5 border-b border-border">
           <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-semibold text-sm tracking-tight">
-                BNU
-              </span>
+            <div className="h-8 w-8 rounded-md bg-white flex items-center justify-center overflow-hidden shrink-0">
+              <img src="/favicon.jpg" alt="BNU" className="h-full w-full object-contain" />
             </div>
             <div className="leading-tight">
-              <div className="text-sm font-semibold">Scholarships</div>
+              <div className="text-base font-semibold">Scholarships</div>
               <div className="text-[11px] text-muted-foreground">Registrar Office</div>
             </div>
           </div>

@@ -101,6 +101,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/w59mfHGFFAW2Mk7EydiVY3UerzQ2/social-images/social-1783935225123-BNU.webp" },
     ],
     links: [
+      { rel: "icon", type: "image/jpeg", href: "/favicon.jpg" },
       {
         rel: "stylesheet",
         href: appCss,
