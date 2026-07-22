@@ -157,11 +157,24 @@ function StudentsPage() {
         subtitle="Open a student to review their awards, merge, and coverage."
       />
       <div className="px-8 py-6 space-y-4">
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
           <div className="relative w-72 shrink-0">
             <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name or reg no" className="pl-9 bg-white" />
           </div>
+          <button
+            onClick={() => setOnlyScholars((v) => !v)}
+            className={[
+              "text-xs px-3 py-1.5 rounded-md border transition-colors shrink-0",
+              onlyScholars ? "border-primary bg-primary/5 text-primary" : "border-border bg-white",
+            ].join(" ")}
+          >
+            Only scholars
+          </button>
+          <div className="ml-auto text-xs text-muted-foreground shrink-0">{rows.length} students</div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-x-6 gap-y-3">
           <Filter label="School" value={f.school} onChange={(v) => set("school", v)} options={["all", ...SCHOOLS]} />
           <Filter label="Batch" value={f.batch} onChange={(v) => set("batch", v)} options={["all", ...BATCHES]} />
           <Filter label="Study level" value={f.studyLevel} onChange={(v) => set("studyLevel", v)} options={["all", "Bachelors", "Masters"]} />
@@ -188,16 +201,6 @@ function StudentsPage() {
             options={["all", ...cities]}
           />
           <Filter label="District" value={f.district} onChange={(v) => set("district", v)} options={["all", ...districts]} />
-          <button
-            onClick={() => setOnlyScholars((v) => !v)}
-            className={[
-              "text-xs px-3 py-1.5 rounded-md border transition-colors",
-              onlyScholars ? "border-primary bg-primary/5 text-primary" : "border-border bg-white",
-            ].join(" ")}
-          >
-            Only scholars
-          </button>
-          <div className="ml-auto text-xs text-muted-foreground">{rows.length} students</div>
         </div>
 
         {activeChips.length > 0 && (
@@ -297,10 +300,10 @@ function Filter({
   labels?: Record<string, string>;
 }) {
   return (
-    <div className="flex items-center gap-1.5 shrink-0">
-      <span className="text-xs text-muted-foreground whitespace-nowrap">{label}</span>
+    <div className="flex items-center gap-1.5 min-w-0">
+      <span className="text-xs text-muted-foreground whitespace-nowrap w-[88px] shrink-0">{label}</span>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="h-8 min-w-[140px] text-xs bg-white">
+        <SelectTrigger className="h-8 w-full text-xs bg-white">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

@@ -441,7 +441,7 @@ function FilterBar({
 
   return (
     <div className="sticky top-[73px] z-10 -mx-8 px-8 py-3 bg-background/85 backdrop-blur border-b border-border">
-      <div className="flex flex-wrap gap-x-5 gap-y-3 items-center">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-x-6 gap-y-3">
         <FilterSelect label="School" value={f.school} onChange={(v) => set("school", v)} options={["all", ...SCHOOLS]} />
         <FilterSelect label="Batch" value={f.batch} onChange={(v) => set("batch", v)} options={["all", ...BATCHES]} />
         <FilterSelect label="Study level" value={f.studyLevel} onChange={(v) => set("studyLevel", v)} options={["all", "Bachelors", "Masters"]} />
@@ -468,7 +468,9 @@ function FilterBar({
           options={["all", ...cities]}
         />
         <FilterSelect label="District" value={f.district} onChange={(v) => set("district", v)} options={["all", ...districts]} />
-        <Badge variant="outline" className="ml-auto font-normal text-muted-foreground">
+      </div>
+      <div className="mt-2.5 flex justify-end">
+        <Badge variant="outline" className="font-normal text-muted-foreground">
           Filters apply to every panel
         </Badge>
       </div>
@@ -490,10 +492,10 @@ function FilterSelect({
   labels?: Record<string, string>;
 }) {
   return (
-    <div className="flex items-center gap-1.5 shrink-0">
-      <span className="text-xs text-muted-foreground whitespace-nowrap">{label}</span>
+    <div className="flex items-center gap-1.5 min-w-0">
+      <span className="text-xs text-muted-foreground whitespace-nowrap w-[88px] shrink-0">{label}</span>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="h-8 min-w-[140px] text-xs bg-white">
+        <SelectTrigger className="h-8 w-full text-xs bg-white">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
