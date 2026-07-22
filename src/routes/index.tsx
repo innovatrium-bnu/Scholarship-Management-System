@@ -262,14 +262,14 @@ function Dashboard() {
 
         <div className="grid grid-cols-3 gap-4">
           <ChartCard title="Share by scholarship" className="col-span-1">
-            <ResponsiveContainer width="100%" height={240}>
-              <PieChart>
+            <ResponsiveContainer width="100%" height={320}>
+              <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                 <Pie
                   data={byType}
                   dataKey="value"
                   nameKey="name"
-                  innerRadius={55}
-                  outerRadius={90}
+                  innerRadius={48}
+                  outerRadius={75}
                   stroke="#fff"
                   onClick={(d: any) => {
                     const sch = scholarships.find((s) => s.name === d.name);
@@ -285,13 +285,19 @@ function Dashboard() {
                   ))}
                 </Pie>
                 <RTooltip />
-                <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
+                <Legend
+                  verticalAlign="bottom"
+                  align="center"
+                  iconType="circle"
+                  iconSize={8}
+                  wrapperStyle={{ fontSize: 11, lineHeight: "20px", paddingTop: 12 }}
+                />
               </PieChart>
             </ResponsiveContainer>
           </ChartCard>
 
           <ChartCard title="Scholars over time" className="col-span-2">
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={320}>
               <LineChart data={overTime} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E6ECF1" />
                 <XAxis dataKey="year" tick={{ fontSize: 11, fill: "#6B7C8C" }} />
