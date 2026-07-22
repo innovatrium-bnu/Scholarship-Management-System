@@ -59,48 +59,62 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-label: var(--label-foreground);
+  --color-primary-light: var(--primary-light);
+  --color-primary-tint: var(--primary-tint);
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+  --color-series-3: var(--series-3);
+  --color-series-4: var(--series-4);
 }
 
 :root {
-  --radius: 0.625rem;
-  /* BNU Scholarship Management — restrained greyscale + single teal accent */
-  --background: #ffffff;
-  --foreground: #111111;
-  --surface: #fafafa;
+  --radius: 0.75rem;
+  /* BNU Vitals — white / light blue-grey / steel navy */
+  --background: #f7f9fb;
+  --foreground: #12212e;
+  --surface: #ffffff;
   --card: #ffffff;
-  --card-foreground: #111111;
+  --card-foreground: #12212e;
   --popover: #ffffff;
-  --popover-foreground: #111111;
-  --primary: #0d9488;
-  --primary-hover: #0f766e;
+  --popover-foreground: #12212e;
+  --primary: #1b6c8c;
+  --primary-hover: #14556e;
+  --primary-light: #93c1d4;
+  --primary-tint: #edf4f8;
   --primary-foreground: #ffffff;
-  --secondary: #f4f4f5;
-  --secondary-foreground: #111111;
-  --muted: #fafafa;
-  --muted-foreground: #6b7280;
-  --accent: #f4f4f5;
-  --accent-foreground: #111111;
+  --secondary: #edf2f5;
+  --secondary-foreground: #12212e;
+  --muted: #edf2f5;
+  --muted-foreground: #6b7c8c;
+  --label-foreground: #8896a4;
+  --accent: #edf2f5;
+  --accent-foreground: #12212e;
   --destructive: #b91c1c;
   --destructive-foreground: #ffffff;
-  --warning: #b45309;
-  --warning-bg: #fef3c7;
-  --warning-border: #fcd34d;
-  --border: #e5e5e5;
-  --input: #e5e5e5;
-  --ring: #0d9488;
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: #fafafa;
-  --sidebar-foreground: #111111;
-  --sidebar-primary: #0d9488;
+  --warning: #92400e;
+  --warning-bg: #fbf1dc;
+  --warning-border: #e3b871;
+  --border: #e6ecf1;
+  --input: #e6ecf1;
+  --ring: #1b6c8c;
+  --series-1: #1b6c8c;
+  --series-2: #e8663c;
+  --series-3: #2fae7e;
+  --series-4: #f0b429;
+  --chart-1: #1b6c8c;
+  --chart-2: #e8663c;
+  --chart-3: #2fae7e;
+  --chart-4: #f0b429;
+  --chart-5: #93c1d4;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #12212e;
+  --sidebar-primary: #1b6c8c;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f4f4f5;
-  --sidebar-accent-foreground: #111111;
-  --sidebar-border: #e5e5e5;
-  --sidebar-ring: #0d9488;
+  --sidebar-accent: #edf4f8;
+  --sidebar-accent-foreground: #12212e;
+  --sidebar-border: #e6ecf1;
+  --sidebar-ring: #1b6c8c;
 }
 
 .dark {

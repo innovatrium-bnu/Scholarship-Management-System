@@ -282,7 +282,7 @@ function AssignFlow() {
               Evaluated {evaluated.length} students against {scholarship.name}.
             </div>
             <div className="grid grid-cols-4 gap-3">
-              <BucketCard label="Eligible" count={buckets.Eligible.length} tone="teal" />
+              <BucketCard label="Eligible" count={buckets.Eligible.length} tone="primary" />
               <BucketCard label="Pending verification" count={buckets.PendingVerification.length} tone="amber" />
               <BucketCard label="Not eligible" count={buckets.NotEligible.length} tone="grey" />
               <BucketCard label="Already holds this" count={buckets.AlreadyHolds.length} tone="grey" />
@@ -453,8 +453,8 @@ function MiniSelect({ label, value, onChange, options }: { label: string; value:
   );
 }
 
-function BucketCard({ label, count, tone }: { label: string; count: number; tone: "teal" | "amber" | "grey" }) {
-  const cls = tone === "teal" ? "border-primary/30 bg-primary/5" : tone === "amber" ? "border-[var(--warning-border)] bg-[var(--warning-bg)]" : "border-border bg-white";
+function BucketCard({ label, count, tone }: { label: string; count: number; tone: "primary" | "amber" | "grey" }) {
+  const cls = tone === "primary" ? "border-primary/30 bg-primary/5" : tone === "amber" ? "border-[var(--warning-border)] bg-[var(--warning-bg)]" : "border-border bg-white";
   return (
     <div className={`rounded-lg border p-4 ${cls}`}>
       <div className="text-xs text-muted-foreground">{label}</div>
@@ -589,7 +589,7 @@ function ReviewStep(props: {
         </div>
       )}
 
-      <div className="rounded-lg border border-border bg-white overflow-hidden">
+      <div className="rounded-lg border border-border bg-white overflow-hidden shadow-[0_1px_2px_rgba(18,33,46,0.04)]">
         <Table>
           <TableHeader>
             <TableRow>

@@ -5,8 +5,6 @@ import type { ReactNode } from "react";
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const isActive = (to: string, exact?: boolean) => (exact ? pathname === to : pathname === to || pathname.startsWith(to + "/") || pathname.startsWith(to + "?"));
-  const dashboardOpen = pathname === "/" || pathname.startsWith("/students");
-  const scholarshipsOpen = pathname.startsWith("/scholarships");
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
@@ -25,27 +23,27 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
         <nav className="flex-1 p-3 space-y-0.5 text-sm">
-          <div className={`px-3 py-1.5 flex items-center gap-2.5 text-xs uppercase tracking-wide font-semibold ${dashboardOpen ? "text-foreground" : "text-muted-foreground"}`}>
+          <div className="px-3 py-1.5 flex items-center gap-2.5 text-[11px] uppercase tracking-wider font-semibold text-label">
             <LayoutDashboard className="h-3.5 w-3.5" />
             Dashboard
           </div>
-          <div className="ml-1 pl-3 border-l border-border/80 space-y-0.5">
+          <div className="space-y-0.5">
             <SubNavLink to="/" exact label="Overview" icon={PieChart} active={isActive("/", true)} />
             <SubNavLink to="/students" label="Students" icon={Users} active={isActive("/students")} />
           </div>
-          <div className="pt-2">
-            <div className={`px-3 py-1.5 flex items-center gap-2.5 text-xs uppercase tracking-wide font-semibold ${scholarshipsOpen ? "text-foreground" : "text-muted-foreground"}`}>
+          <div className="pt-3">
+            <div className="px-3 py-1.5 flex items-center gap-2.5 text-[11px] uppercase tracking-wider font-semibold text-label">
               <GraduationCap className="h-3.5 w-3.5" />
               Scholarships
             </div>
-            <div className="ml-1 pl-3 border-l border-border/80 space-y-0.5">
+            <div className="space-y-0.5">
               <SubNavLink to="/scholarships/create" label="Create" icon={Plus} active={isActive("/scholarships/create")} />
               <SubNavLink to="/scholarships" exact label="Update" icon={Pencil} active={isActive("/scholarships", true)} />
               <SubNavLink to="/scholarships/apply" label="Apply" icon={UserPlus} active={isActive("/scholarships/apply")} />
               <SubNavLink to="/scholarships/delete" label="Delete" icon={Trash2} active={isActive("/scholarships/delete")} />
             </div>
           </div>
-          <div className="pt-2">
+          <div className="pt-3">
             <TopNavLink to="/settings/precedence" label="Settings" icon={Settings} active={pathname.startsWith("/settings")} />
           </div>
         </nav>
@@ -63,10 +61,10 @@ function TopNavLink({ to, label, icon: Icon, active }: { to: string; label: stri
     <Link
       to={to}
       className={[
-        "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors",
+        "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors border-l-2",
         active
-          ? "bg-white text-primary font-medium shadow-[0_1px_2px_rgba(0,0,0,0.04)] border border-border"
-          : "text-foreground/80 hover:bg-white/60 hover:text-foreground",
+          ? "bg-primary-tint text-primary font-semibold border-l-primary"
+          : "text-foreground/75 border-l-transparent hover:bg-primary-tint/60 hover:text-foreground",
       ].join(" ")}
     >
       <Icon className="h-4 w-4" strokeWidth={active ? 2.25 : 2} />
@@ -81,10 +79,10 @@ function SubNavLink({ to, label, icon: Icon, active, exact }: { to: string; labe
     <Link
       to={to}
       className={[
-        "flex items-center gap-2 px-3 py-1.5 rounded-md text-[13px] transition-colors",
+        "flex items-center gap-2 px-3 py-1.5 rounded-md text-[13px] transition-colors border-l-2",
         active
-          ? "bg-white text-primary font-medium border border-border"
-          : "text-foreground/75 hover:bg-white/60 hover:text-foreground",
+          ? "bg-primary-tint text-primary font-semibold border-l-primary"
+          : "text-foreground/70 border-l-transparent hover:bg-primary-tint/60 hover:text-foreground",
       ].join(" ")}
     >
       <Icon className="h-3.5 w-3.5" strokeWidth={active ? 2.25 : 2} />
@@ -106,7 +104,7 @@ export function PageHeader({
     <div className="sticky top-0 z-20 bg-background/85 backdrop-blur border-b border-border">
       <div className="px-8 py-5 flex items-center justify-between gap-6">
         <div className="min-w-0">
-          <h1 className="text-[22px] font-semibold tracking-tight leading-tight">{title}</h1>
+          <h1 className="text-[28px] font-bold tracking-tight leading-tight">{title}</h1>
           {subtitle ? (
             <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>
           ) : null}

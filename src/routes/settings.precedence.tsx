@@ -79,7 +79,7 @@ function PrecedencePage() {
           scholarship is reduced first. Because scholarships may be funded from different sources, this order
           determines what BNU can bill each donor.
         </p>
-        <div className="max-w-3xl rounded-lg border border-border bg-white overflow-hidden">
+        <div className="max-w-3xl rounded-lg border border-border bg-white overflow-hidden shadow-[0_1px_2px_rgba(18,33,46,0.04)]">
           <div className="grid grid-cols-[auto_auto_1fr] items-center gap-3 px-4 py-2 text-[11px] uppercase tracking-wide text-muted-foreground border-b border-border">
             <span className="w-6"></span>
             <span className="w-6 text-right">#</span>

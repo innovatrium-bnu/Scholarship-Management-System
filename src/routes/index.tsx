@@ -66,8 +66,8 @@ const EMPTY: Filters = {
   district: "all",
 };
 
-const TEAL = "#0D9488";
-const GREY = ["#111111", "#374151", "#6B7280", "#9CA3AF", "#D1D5DB", "#E5E7EB"];
+const PRIMARY = "#1B6C8C";
+const GREY = ["#14556E", "#6B7C8C", "#93C1D4", "#AEC4CF", "#CBD8E0", "#E6ECF1"];
 
 function Dashboard() {
   const { students, awards, scholarships } = useStore();
@@ -279,7 +279,7 @@ function Dashboard() {
                   {byType.map((_, i) => (
                     <Cell
                       key={i}
-                      fill={i === 0 ? TEAL : GREY[(i - 1) % GREY.length]}
+                      fill={i === 0 ? PRIMARY : GREY[(i - 1) % GREY.length]}
                       cursor="pointer"
                     />
                   ))}
@@ -292,16 +292,16 @@ function Dashboard() {
           <ChartCard title="Scholars over time" className="col-span-2">
             <ResponsiveContainer width="100%" height={240}>
               <LineChart data={overTime} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#EEE" />
-                <XAxis dataKey="year" tick={{ fontSize: 11, fill: "#6B7280" }} />
-                <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#E6ECF1" />
+                <XAxis dataKey="year" tick={{ fontSize: 11, fill: "#6B7C8C" }} />
+                <YAxis tick={{ fontSize: 11, fill: "#6B7C8C" }} />
                 <RTooltip />
                 <Line
                   type="monotone"
                   dataKey="scholars"
-                  stroke={TEAL}
+                  stroke={PRIMARY}
                   strokeWidth={2}
-                  dot={{ r: 3, fill: TEAL }}
+                  dot={{ r: 3, fill: PRIMARY }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -312,19 +312,19 @@ function Dashboard() {
           <ChartCard title="Scholars by school">
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={bySchool} margin={{ left: 8, right: 8, top: 8, bottom: 40 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#EEE" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#E6ECF1" />
                 <XAxis
                   dataKey="school"
-                  tick={{ fontSize: 10, fill: "#6B7280" }}
+                  tick={{ fontSize: 10, fill: "#6B7C8C" }}
                   angle={-20}
                   textAnchor="end"
                   height={60}
                 />
-                <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} />
+                <YAxis tick={{ fontSize: 11, fill: "#6B7C8C" }} />
                 <RTooltip />
                 <Bar
                   dataKey="count"
-                  fill={TEAL}
+                  fill={PRIMARY}
                   radius={[3, 3, 0, 0]}
                   onClick={(d: any) => goStudents({ school: d.school })}
                   cursor="pointer"
@@ -336,18 +336,18 @@ function Dashboard() {
           <ChartCard title="Waiver value by fee head (per school)">
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={waiverByHead} margin={{ left: 8, right: 8, top: 8, bottom: 40 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#EEE" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#E6ECF1" />
                 <XAxis
                   dataKey="school"
-                  tick={{ fontSize: 10, fill: "#6B7280" }}
+                  tick={{ fontSize: 10, fill: "#6B7C8C" }}
                   angle={-20}
                   textAnchor="end"
                   height={60}
                 />
-                <YAxis tick={{ fontSize: 10, fill: "#6B7280" }} tickFormatter={(v) => `${(v / 1e6).toFixed(1)}M`} />
+                <YAxis tick={{ fontSize: 10, fill: "#6B7C8C" }} tickFormatter={(v) => `${(v / 1e6).toFixed(1)}M`} />
                 <RTooltip formatter={(v: number) => pkr(v)} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="Tuition" stackId="a" fill={TEAL} />
+                <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
+                <Bar dataKey="Tuition" stackId="a" fill={PRIMARY} />
                 <Bar dataKey="Hostel" stackId="a" fill={GREY[2]} />
                 <Bar dataKey="Other" stackId="a" fill={GREY[4]} />
               </BarChart>
@@ -357,18 +357,18 @@ function Dashboard() {
           <ChartCard title="Scholarships gained vs lost">
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={gainedLost} margin={{ left: 8, right: 8, top: 8, bottom: 40 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#EEE" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#E6ECF1" />
                 <XAxis
                   dataKey="semester"
-                  tick={{ fontSize: 10, fill: "#6B7280" }}
+                  tick={{ fontSize: 10, fill: "#6B7C8C" }}
                   angle={-20}
                   textAnchor="end"
                   height={50}
                 />
-                <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} />
+                <YAxis tick={{ fontSize: 11, fill: "#6B7C8C" }} />
                 <RTooltip />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="gained" fill={TEAL} radius={[3, 3, 0, 0]} />
+                <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
+                <Bar dataKey="gained" fill={PRIMARY} radius={[3, 3, 0, 0]} />
                 <Bar dataKey="lost" fill={GREY[3]} radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -377,13 +377,13 @@ function Dashboard() {
           <ChartCard title="Coverage band distribution">
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={bandDist} margin={{ left: 8, right: 8, top: 8, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#EEE" />
-                <XAxis dataKey="band" tick={{ fontSize: 11, fill: "#6B7280" }} />
-                <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#E6ECF1" />
+                <XAxis dataKey="band" tick={{ fontSize: 11, fill: "#6B7C8C" }} />
+                <YAxis tick={{ fontSize: 11, fill: "#6B7C8C" }} />
                 <RTooltip />
                 <Bar
                   dataKey="count"
-                  fill={TEAL}
+                  fill={PRIMARY}
                   radius={[3, 3, 0, 0]}
                   onClick={(d: any) => goStudents({ band: d.band })}
                   cursor="pointer"
@@ -399,11 +399,11 @@ function Dashboard() {
 
 function Kpi({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-border bg-white p-5">
-      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+    <div className="rounded-lg border border-border bg-card p-5 shadow-[0_1px_2px_rgba(18,33,46,0.04)]">
+      <div className="text-xs font-semibold text-label uppercase tracking-wider">
         {label}
       </div>
-      <div className="mt-2 text-2xl font-semibold tabular tracking-tight">{value}</div>
+      <div className="mt-2.5 text-[34px] leading-none font-bold tabular tracking-tight text-foreground">{value}</div>
     </div>
   );
 }
@@ -418,8 +418,8 @@ function ChartCard({
   className?: string;
 }) {
   return (
-    <div className={`rounded-lg border border-border bg-white p-5 ${className ?? ""}`}>
-      <div className="text-sm font-medium text-foreground mb-3">{title}</div>
+    <div className={`rounded-lg border border-border bg-card p-5 shadow-[0_1px_2px_rgba(18,33,46,0.04)] ${className ?? ""}`}>
+      <div className="text-base font-bold text-foreground mb-3">{title}</div>
       {children}
     </div>
   );
@@ -441,7 +441,7 @@ function FilterBar({
 
   return (
     <div className="sticky top-[73px] z-10 -mx-8 px-8 py-3 bg-background/85 backdrop-blur border-b border-border">
-      <div className="flex flex-wrap gap-2 items-center">
+      <div className="flex flex-wrap gap-x-5 gap-y-3 items-center">
         <FilterSelect label="School" value={f.school} onChange={(v) => set("school", v)} options={["all", ...SCHOOLS]} />
         <FilterSelect label="Batch" value={f.batch} onChange={(v) => set("batch", v)} options={["all", ...BATCHES]} />
         <FilterSelect label="Study level" value={f.studyLevel} onChange={(v) => set("studyLevel", v)} options={["all", "Bachelors", "Masters"]} />
@@ -490,8 +490,8 @@ function FilterSelect({
   labels?: Record<string, string>;
 }) {
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-xs text-muted-foreground">{label}</span>
+    <div className="flex items-center gap-1.5 shrink-0">
+      <span className="text-xs text-muted-foreground whitespace-nowrap">{label}</span>
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="h-8 min-w-[140px] text-xs bg-white">
           <SelectValue />

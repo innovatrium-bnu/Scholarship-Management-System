@@ -71,8 +71,8 @@ export const Route = createFileRoute("/students/$regNo")({
   }),
 });
 
-const TEAL = "#0D9488";
-const GREYS = ["#374151", "#6B7280", "#9CA3AF", "#D1D5DB"];
+const PRIMARY = "#1B6C8C";
+const GREYS = ["#14556E", "#6B7C8C", "#93C1D4", "#CBD8E0"];
 
 function StudentDetail() {
   const { regNo } = useParams({ from: "/students/$regNo" });
@@ -444,7 +444,7 @@ function CoverageBar({
             title={`${s.m.scholarship.name}: ${s.c.appliedPct}%`}
             style={{
               width: `${s.c.appliedPct}%`,
-              background: i === 0 ? TEAL : GREYS[(i - 1) % GREYS.length],
+              background: i === 0 ? PRIMARY : GREYS[(i - 1) % GREYS.length],
             }}
             className="h-full transition-all duration-500"
           />
@@ -461,7 +461,7 @@ function CoverageBar({
                     s.c.kind === "Fixed amount"
                       ? GREYS[3]
                       : i === 0
-                        ? TEAL
+                        ? PRIMARY
                         : GREYS[(i - 1) % GREYS.length],
                 }}
               />
@@ -501,7 +501,7 @@ function MergeTable({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-white overflow-hidden">
+    <div className="rounded-lg border border-border bg-white overflow-hidden shadow-[0_1px_2px_rgba(18,33,46,0.04)]">
       <Table>
         <TableHeader>
           <TableRow>

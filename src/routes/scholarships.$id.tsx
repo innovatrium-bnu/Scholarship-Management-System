@@ -142,7 +142,7 @@ function ScholarshipDetail() {
           </TabsContent>
 
           <TabsContent value="recipients" className="mt-4">
-            <div className="rounded-lg border border-border bg-white overflow-hidden">
+            <div className="rounded-lg border border-border bg-white overflow-hidden shadow-[0_1px_2px_rgba(18,33,46,0.04)]">
               <Table>
                 <TableHeader>
                   <TableRow>

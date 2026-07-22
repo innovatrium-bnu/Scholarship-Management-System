@@ -157,8 +157,8 @@ function StudentsPage() {
         subtitle="Open a student to review their awards, merge, and coverage."
       />
       <div className="px-8 py-6 space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative w-72">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+          <div className="relative w-72 shrink-0">
             <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name or reg no" className="pl-9 bg-white" />
           </div>
@@ -216,7 +216,7 @@ function StudentsPage() {
           </div>
         )}
 
-        <div className="rounded-lg border border-border bg-white overflow-hidden">
+        <div className="rounded-lg border border-border bg-white overflow-hidden shadow-[0_1px_2px_rgba(18,33,46,0.04)]">
           <Table>
             <TableHeader>
               <TableRow>
@@ -297,8 +297,8 @@ function Filter({
   labels?: Record<string, string>;
 }) {
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-xs text-muted-foreground">{label}</span>
+    <div className="flex items-center gap-1.5 shrink-0">
+      <span className="text-xs text-muted-foreground whitespace-nowrap">{label}</span>
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="h-8 min-w-[140px] text-xs bg-white">
           <SelectValue />
