@@ -18,9 +18,27 @@ import tsConfigPaths from "vite-tsconfig-paths";
  * path resolution first, then TanStack Start, then the Nitro server build, with
  * the React plugin last.
  */
+/**
+ * Which server Nitro should build for.
+ *
+ * The university runs this on its own hardware, so `node-server` — a plain
+ * Node app started with `node .output/server/index.mjs` — is the real target
+ * and stays the default everywhere.
+ *
+ * Vercel hosts the demo. Its build environment sets `VERCEL=1` itself, which
+ * is the whole trigger: nobody has to remember to pass a flag, and a local
+ * build cannot accidentally produce Vercel output. `NITRO_PRESET` overrides
+ * both if you want to test the other one by hand.
+ */
+function resolvePreset(): string {
+  if (process.env.NITRO_PRESET) return process.env.NITRO_PRESET;
+  return process.env.VERCEL ? "vercel" : "node-server";
+}
+
 export default defineConfig(({ command, mode }) => {
   const isBuild = command === "build";
   const isDevBuild = isBuild && mode === "development";
+  const preset = resolvePreset();
 
   return {
     plugins: [
@@ -40,9 +58,9 @@ export default defineConfig(({ command, mode }) => {
         },
       }),
       // Nitro produces the deployable server, so it is only needed on build.
-      // `node-server` emits a plain Node app for the BNU server: run it with
-      // `node .output/server/index.mjs`.
-      ...(isBuild ? [nitro({ preset: "node-server" })] : []),
+      // `node-server` emits .output/ for the BNU server; `vercel` emits
+      // .vercel/output/ for the demo. See resolvePreset above.
+      ...(isBuild ? [nitro({ preset })] : []),
       viteReact(),
     ],
 

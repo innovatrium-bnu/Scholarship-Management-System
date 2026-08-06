@@ -64,11 +64,32 @@ ExecStart=/usr/bin/node .output/server/index.mjs
 Restart=always
 ```
 
-### Changing the deployment target
+## Deploying the demo to Vercel
 
-The Nitro preset is set in [`vite.config.ts`](vite.config.ts). `node-server` is
-correct for on-premise hosting; the preset would only change if BNU moved to a
-different hosting model.
+The Vercel project builds from this repository and serves the demo. Nothing
+special is needed to make that work: Vercel sets `VERCEL=1` in its build
+environment, and [`vite.config.ts`](vite.config.ts) switches the Nitro preset to
+`vercel` when it sees it, emitting `.vercel/output/` instead of `.output/`.
+
+The university's own server remains the real target, and it is the default
+everywhere else — a local `npm run build` cannot accidentally produce Vercel
+output, and a Vercel build cannot accidentally produce an on-premise one.
+
+To check the Vercel build by hand:
+
+```bash
+NITRO_PRESET=vercel npm run build     # produces .vercel/output/
+```
+
+`NITRO_PRESET` overrides the detection either way, which is the escape hatch if
+a third target is ever added.
+
+> The demo carries the same seeded, in-memory data as a local run, and it is
+> regenerated on every page load. No student record is stored on Vercel, because
+> there is no database yet. That changes the day the PostgreSQL backend lands,
+> and the deployment target should be reconsidered then — university records
+> should not sit on a third-party host without that being a decision somebody
+> signed.
 
 ## Architecture
 
