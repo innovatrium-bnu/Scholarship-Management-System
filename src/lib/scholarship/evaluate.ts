@@ -10,12 +10,18 @@ export interface EvalResult {
   percentile?: number;
 }
 
-function passesAutomatic(rule: { field?: string; operator?: string; threshold?: string | number; description?: string }, s: Student): { pass: boolean; label: string } {
-  const label = rule.description || `${rule.field ?? ""} ${rule.operator ?? ""} ${rule.threshold ?? ""}`.trim();
+function passesAutomatic(
+  rule: { field?: string; operator?: string; threshold?: string | number; description?: string },
+  s: Student,
+): { pass: boolean; label: string } {
+  const label =
+    rule.description || `${rule.field ?? ""} ${rule.operator ?? ""} ${rule.threshold ?? ""}`.trim();
   if (rule.field === "cgpa" && typeof rule.threshold === "number") {
     const t = rule.threshold;
-    if (rule.operator === ">=") return { pass: s.cgpa >= t, label: `CGPA ${s.cgpa.toFixed(2)} is below the required ${t}` };
-    if (rule.operator === ">") return { pass: s.cgpa > t, label: `CGPA ${s.cgpa.toFixed(2)} must exceed ${t}` };
+    if (rule.operator === ">=")
+      return { pass: s.cgpa >= t, label: `CGPA ${s.cgpa.toFixed(2)} is below the required ${t}` };
+    if (rule.operator === ">")
+      return { pass: s.cgpa > t, label: `CGPA ${s.cgpa.toFixed(2)} must exceed ${t}` };
   }
   // Fall back to description heuristics
   const d = (rule.description ?? "").toLowerCase();
@@ -29,10 +35,13 @@ function passesAutomatic(rule: { field?: string; operator?: string; threshold?: 
 
 function manualLabel(desc: string): { field: keyof Student; label: string } | null {
   const d = desc.toLowerCase();
-  if (d.includes("financial") || d.includes("need")) return { field: "financialNeedVerified", label: "Financial need verification" };
-  if (d.includes("personal statement")) return { field: "personalStatementOk", label: "Personal statement review" };
+  if (d.includes("financial") || d.includes("need"))
+    return { field: "financialNeedVerified", label: "Financial need verification" };
+  if (d.includes("personal statement"))
+    return { field: "personalStatementOk", label: "Personal statement review" };
   if (d.includes("sport")) return { field: "hasSportsMedal", label: "Sports medal verification" };
-  if (d.includes("bfit") || d.includes("b.fit")) return { field: "bfitMember", label: "B.Fit membership" };
+  if (d.includes("bfit") || d.includes("b.fit"))
+    return { field: "bfitMember", label: "B.Fit membership" };
   return null;
 }
 
@@ -50,19 +59,23 @@ export function evaluate(
 
   // Scope filters
   const inScope = (s: Student) => {
-    if (scholarship.studyLevel !== "Both" && scholarship.studyLevel !== s.studyLevel) return `Study level (requires ${scholarship.studyLevel})`;
-    if (scholarship.schools.length > 0 && !scholarship.schools.includes(s.school)) return `School not eligible (requires one of ${scholarship.schools.join(", ")})`;
-    if (scholarship.programmes.length > 0 && !scholarship.programmes.includes(s.programme)) return `Programme not eligible (requires one of ${scholarship.programmes.join(", ")})`;
-    if (scholarship.batches.length > 0 && !scholarship.batches.includes(s.batch)) return `Batch not eligible`;
+    if (scholarship.studyLevel !== "Both" && scholarship.studyLevel !== s.studyLevel)
+      return `Study level (requires ${scholarship.studyLevel})`;
+    if (scholarship.schools.length > 0 && !scholarship.schools.includes(s.school))
+      return `School not eligible (requires one of ${scholarship.schools.join(", ")})`;
+    if (scholarship.programmes.length > 0 && !scholarship.programmes.includes(s.programme))
+      return `Programme not eligible (requires one of ${scholarship.programmes.join(", ")})`;
+    if (scholarship.batches.length > 0 && !scholarship.batches.includes(s.batch))
+      return `Batch not eligible`;
     return null;
   };
 
-  // Cohort rank rule — ranked against the FULL cohort that passes scope, not just
+  // Cohort rank rule: ranked against the FULL cohort that passes scope, not just
   // whichever subset of students is being targeted for this assignment run. This
   // matters when targeting a single student: they must be ranked against their
   // whole cohort, not a population of one.
   const cohortRule = scholarship.awardRules.find((r) => r.kind === "Cohort rank");
-  let rankMap = new Map<string, { rank: number; percentile: number }>();
+  const rankMap = new Map<string, { rank: number; percentile: number }>();
   if (cohortRule) {
     const eligibleForRanking = rankingPopulation.filter((s) => !inScope(s));
     const sorted = [...eligibleForRanking].sort((a, b) => b.cgpa - a.cgpa);
@@ -73,7 +86,8 @@ export function evaluate(
   }
 
   return students.map<EvalResult>((s) => {
-    if (held.has(s.regNo)) return { student: s, status: "AlreadyHolds", reasons: ["Already holds this scholarship"] };
+    if (held.has(s.regNo))
+      return { student: s, status: "AlreadyHolds", reasons: ["Already holds this scholarship"] };
     const scopeFail = inScope(s);
     const reasons: string[] = [];
     let notEligible = false;
@@ -117,8 +131,28 @@ export function evaluate(
     }
 
     const info = rankMap.get(s.regNo);
-    if (notEligible) return { student: s, status: "NotEligible", reasons, rank: info?.rank, percentile: info?.percentile };
-    if (pending) return { student: s, status: "PendingVerification", reasons, rank: info?.rank, percentile: info?.percentile };
-    return { student: s, status: "Eligible", reasons: [], rank: info?.rank, percentile: info?.percentile };
+    if (notEligible)
+      return {
+        student: s,
+        status: "NotEligible",
+        reasons,
+        rank: info?.rank,
+        percentile: info?.percentile,
+      };
+    if (pending)
+      return {
+        student: s,
+        status: "PendingVerification",
+        reasons,
+        rank: info?.rank,
+        percentile: info?.percentile,
+      };
+    return {
+      student: s,
+      status: "Eligible",
+      reasons: [],
+      rank: info?.rank,
+      percentile: info?.percentile,
+    };
   });
 }

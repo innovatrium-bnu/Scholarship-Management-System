@@ -12,13 +12,18 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StudentsIndexRouteImport } from './routes/students.index'
 import { Route as ScholarshipsIndexRouteImport } from './routes/scholarships.index'
+import { Route as ApplicationsIndexRouteImport } from './routes/applications.index'
+import { Route as StudentsEditRouteImport } from './routes/students.edit'
 import { Route as StudentsRegNoRouteImport } from './routes/students.$regNo'
 import { Route as SettingsPrecedenceRouteImport } from './routes/settings.precedence'
+import { Route as SettingsCriteriaRouteImport } from './routes/settings.criteria'
 import { Route as ScholarshipsDeleteRouteImport } from './routes/scholarships.delete'
 import { Route as ScholarshipsCreateRouteImport } from './routes/scholarships.create'
+import { Route as ScholarshipsArchivedRouteImport } from './routes/scholarships.archived'
 import { Route as ScholarshipsApplyRouteImport } from './routes/scholarships.apply'
 import { Route as ScholarshipsIdRouteImport } from './routes/scholarships.$id'
 import { Route as AssignScholarshipIdRouteImport } from './routes/assign.$scholarshipId'
+import { Route as ApplicationsIdRouteImport } from './routes/applications.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -35,6 +40,16 @@ const ScholarshipsIndexRoute = ScholarshipsIndexRouteImport.update({
   path: '/scholarships/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApplicationsIndexRoute = ApplicationsIndexRouteImport.update({
+  id: '/applications/',
+  path: '/applications/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudentsEditRoute = StudentsEditRouteImport.update({
+  id: '/students/edit',
+  path: '/students/edit',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StudentsRegNoRoute = StudentsRegNoRouteImport.update({
   id: '/students/$regNo',
   path: '/students/$regNo',
@@ -45,6 +60,11 @@ const SettingsPrecedenceRoute = SettingsPrecedenceRouteImport.update({
   path: '/settings/precedence',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsCriteriaRoute = SettingsCriteriaRouteImport.update({
+  id: '/settings/criteria',
+  path: '/settings/criteria',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ScholarshipsDeleteRoute = ScholarshipsDeleteRouteImport.update({
   id: '/scholarships/delete',
   path: '/scholarships/delete',
@@ -53,6 +73,11 @@ const ScholarshipsDeleteRoute = ScholarshipsDeleteRouteImport.update({
 const ScholarshipsCreateRoute = ScholarshipsCreateRouteImport.update({
   id: '/scholarships/create',
   path: '/scholarships/create',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ScholarshipsArchivedRoute = ScholarshipsArchivedRouteImport.update({
+  id: '/scholarships/archived',
+  path: '/scholarships/archived',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ScholarshipsApplyRoute = ScholarshipsApplyRouteImport.update({
@@ -70,41 +95,61 @@ const AssignScholarshipIdRoute = AssignScholarshipIdRouteImport.update({
   path: '/assign/$scholarshipId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApplicationsIdRoute = ApplicationsIdRouteImport.update({
+  id: '/applications/$id',
+  path: '/applications/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/applications/$id': typeof ApplicationsIdRoute
   '/assign/$scholarshipId': typeof AssignScholarshipIdRoute
   '/scholarships/$id': typeof ScholarshipsIdRoute
   '/scholarships/apply': typeof ScholarshipsApplyRoute
+  '/scholarships/archived': typeof ScholarshipsArchivedRoute
   '/scholarships/create': typeof ScholarshipsCreateRoute
   '/scholarships/delete': typeof ScholarshipsDeleteRoute
+  '/settings/criteria': typeof SettingsCriteriaRoute
   '/settings/precedence': typeof SettingsPrecedenceRoute
   '/students/$regNo': typeof StudentsRegNoRoute
+  '/students/edit': typeof StudentsEditRoute
+  '/applications/': typeof ApplicationsIndexRoute
   '/scholarships/': typeof ScholarshipsIndexRoute
   '/students/': typeof StudentsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/applications/$id': typeof ApplicationsIdRoute
   '/assign/$scholarshipId': typeof AssignScholarshipIdRoute
   '/scholarships/$id': typeof ScholarshipsIdRoute
   '/scholarships/apply': typeof ScholarshipsApplyRoute
+  '/scholarships/archived': typeof ScholarshipsArchivedRoute
   '/scholarships/create': typeof ScholarshipsCreateRoute
   '/scholarships/delete': typeof ScholarshipsDeleteRoute
+  '/settings/criteria': typeof SettingsCriteriaRoute
   '/settings/precedence': typeof SettingsPrecedenceRoute
   '/students/$regNo': typeof StudentsRegNoRoute
+  '/students/edit': typeof StudentsEditRoute
+  '/applications': typeof ApplicationsIndexRoute
   '/scholarships': typeof ScholarshipsIndexRoute
   '/students': typeof StudentsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/applications/$id': typeof ApplicationsIdRoute
   '/assign/$scholarshipId': typeof AssignScholarshipIdRoute
   '/scholarships/$id': typeof ScholarshipsIdRoute
   '/scholarships/apply': typeof ScholarshipsApplyRoute
+  '/scholarships/archived': typeof ScholarshipsArchivedRoute
   '/scholarships/create': typeof ScholarshipsCreateRoute
   '/scholarships/delete': typeof ScholarshipsDeleteRoute
+  '/settings/criteria': typeof SettingsCriteriaRoute
   '/settings/precedence': typeof SettingsPrecedenceRoute
   '/students/$regNo': typeof StudentsRegNoRoute
+  '/students/edit': typeof StudentsEditRoute
+  '/applications/': typeof ApplicationsIndexRoute
   '/scholarships/': typeof ScholarshipsIndexRoute
   '/students/': typeof StudentsIndexRoute
 }
@@ -112,50 +157,70 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/applications/$id'
     | '/assign/$scholarshipId'
     | '/scholarships/$id'
     | '/scholarships/apply'
+    | '/scholarships/archived'
     | '/scholarships/create'
     | '/scholarships/delete'
+    | '/settings/criteria'
     | '/settings/precedence'
     | '/students/$regNo'
+    | '/students/edit'
+    | '/applications/'
     | '/scholarships/'
     | '/students/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/applications/$id'
     | '/assign/$scholarshipId'
     | '/scholarships/$id'
     | '/scholarships/apply'
+    | '/scholarships/archived'
     | '/scholarships/create'
     | '/scholarships/delete'
+    | '/settings/criteria'
     | '/settings/precedence'
     | '/students/$regNo'
+    | '/students/edit'
+    | '/applications'
     | '/scholarships'
     | '/students'
   id:
     | '__root__'
     | '/'
+    | '/applications/$id'
     | '/assign/$scholarshipId'
     | '/scholarships/$id'
     | '/scholarships/apply'
+    | '/scholarships/archived'
     | '/scholarships/create'
     | '/scholarships/delete'
+    | '/settings/criteria'
     | '/settings/precedence'
     | '/students/$regNo'
+    | '/students/edit'
+    | '/applications/'
     | '/scholarships/'
     | '/students/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApplicationsIdRoute: typeof ApplicationsIdRoute
   AssignScholarshipIdRoute: typeof AssignScholarshipIdRoute
   ScholarshipsIdRoute: typeof ScholarshipsIdRoute
   ScholarshipsApplyRoute: typeof ScholarshipsApplyRoute
+  ScholarshipsArchivedRoute: typeof ScholarshipsArchivedRoute
   ScholarshipsCreateRoute: typeof ScholarshipsCreateRoute
   ScholarshipsDeleteRoute: typeof ScholarshipsDeleteRoute
+  SettingsCriteriaRoute: typeof SettingsCriteriaRoute
   SettingsPrecedenceRoute: typeof SettingsPrecedenceRoute
   StudentsRegNoRoute: typeof StudentsRegNoRoute
+  StudentsEditRoute: typeof StudentsEditRoute
+  ApplicationsIndexRoute: typeof ApplicationsIndexRoute
   ScholarshipsIndexRoute: typeof ScholarshipsIndexRoute
   StudentsIndexRoute: typeof StudentsIndexRoute
 }
@@ -183,6 +248,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ScholarshipsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/applications/': {
+      id: '/applications/'
+      path: '/applications'
+      fullPath: '/applications/'
+      preLoaderRoute: typeof ApplicationsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/students/edit': {
+      id: '/students/edit'
+      path: '/students/edit'
+      fullPath: '/students/edit'
+      preLoaderRoute: typeof StudentsEditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/students/$regNo': {
       id: '/students/$regNo'
       path: '/students/$regNo'
@@ -197,6 +276,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsPrecedenceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings/criteria': {
+      id: '/settings/criteria'
+      path: '/settings/criteria'
+      fullPath: '/settings/criteria'
+      preLoaderRoute: typeof SettingsCriteriaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/scholarships/delete': {
       id: '/scholarships/delete'
       path: '/scholarships/delete'
@@ -209,6 +295,13 @@ declare module '@tanstack/react-router' {
       path: '/scholarships/create'
       fullPath: '/scholarships/create'
       preLoaderRoute: typeof ScholarshipsCreateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/scholarships/archived': {
+      id: '/scholarships/archived'
+      path: '/scholarships/archived'
+      fullPath: '/scholarships/archived'
+      preLoaderRoute: typeof ScholarshipsArchivedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/scholarships/apply': {
@@ -232,18 +325,30 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AssignScholarshipIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/applications/$id': {
+      id: '/applications/$id'
+      path: '/applications/$id'
+      fullPath: '/applications/$id'
+      preLoaderRoute: typeof ApplicationsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApplicationsIdRoute: ApplicationsIdRoute,
   AssignScholarshipIdRoute: AssignScholarshipIdRoute,
   ScholarshipsIdRoute: ScholarshipsIdRoute,
   ScholarshipsApplyRoute: ScholarshipsApplyRoute,
+  ScholarshipsArchivedRoute: ScholarshipsArchivedRoute,
   ScholarshipsCreateRoute: ScholarshipsCreateRoute,
   ScholarshipsDeleteRoute: ScholarshipsDeleteRoute,
+  SettingsCriteriaRoute: SettingsCriteriaRoute,
   SettingsPrecedenceRoute: SettingsPrecedenceRoute,
   StudentsRegNoRoute: StudentsRegNoRoute,
+  StudentsEditRoute: StudentsEditRoute,
+  ApplicationsIndexRoute: ApplicationsIndexRoute,
   ScholarshipsIndexRoute: ScholarshipsIndexRoute,
   StudentsIndexRoute: StudentsIndexRoute,
 }

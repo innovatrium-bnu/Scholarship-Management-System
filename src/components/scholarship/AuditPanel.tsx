@@ -1,8 +1,24 @@
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/lib/scholarship/store";
 import { formatDistanceToNow } from "date-fns";
-import { History, User, FileText, Pencil, Trash2, ShieldCheck, XCircle, Award, Undo2 } from "lucide-react";
+import {
+  History,
+  User,
+  FileText,
+  Pencil,
+  Trash2,
+  ShieldCheck,
+  XCircle,
+  Award,
+  Undo2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 export function AuditPanel({
@@ -33,7 +49,10 @@ export function AuditPanel({
       }
       if (e.entityType === "Batch") {
         const b = batches.find((x) => x.id === e.entityId);
-        if (b?.awardIds.some((id) => awards.find((a) => a.id === id)?.studentRegNo === studentRegNo)) return true;
+        if (
+          b?.awardIds.some((id) => awards.find((a) => a.id === id)?.studentRegNo === studentRegNo)
+        )
+          return true;
       }
     }
     return false;
@@ -41,51 +60,60 @@ export function AuditPanel({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-[440px] sm:max-w-[440px]">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <History className="h-4 w-4" /> Audit trail
+      <SheetContent className="flex w-full flex-col gap-0 p-0 sm:max-w-lg">
+        <SheetHeader className="border-b border-border p-6">
+          <SheetTitle className="flex items-center gap-2 text-lg">
+            <History className="h-5 w-5 text-primary" /> What has changed
           </SheetTitle>
+          <SheetDescription className="text-sm">
+            Every change is recorded here with who made it and why. Newest first.
+          </SheetDescription>
         </SheetHeader>
-        <div className="mt-6 space-y-3 pr-2 overflow-y-auto max-h-[calc(100vh-120px)]">
+        <div className="flex-1 space-y-3 overflow-y-auto p-6">
           {relevant.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No audit entries yet.</p>
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              Nothing has been changed yet.
+            </p>
           ) : (
             relevant.map((e) => {
               const Icon = pickIcon(e.action);
-              const batch = e.entityType === "Batch" ? batches.find((b) => b.id === e.entityId) : undefined;
+              const batch =
+                e.entityType === "Batch" ? batches.find((b) => b.id === e.entityId) : undefined;
               return (
-                <div key={e.id} className="flex gap-3 rounded-md border border-border p-3">
-                  <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
-                    <Icon className="h-3.5 w-3.5" />
+                <div key={e.id} className="flex gap-3 rounded-xl border border-border bg-card p-4">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--primary-tint)]">
+                    <Icon className="h-4 w-4 text-primary" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-medium">{e.action}</div>
-                      <div className="text-[11px] text-muted-foreground shrink-0">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="text-sm font-semibold">{e.action}</div>
+                      <div className="shrink-0 text-xs text-muted-foreground">
                         {formatDistanceToNow(new Date(e.timestamp), { addSuffix: true })}
                       </div>
                     </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      by {e.actor} · {e.entityType}
-                    </div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">by {e.actor}</div>
                     {e.reason && (
-                      <div className="text-xs mt-1.5 text-foreground/80">Reason: {e.reason}</div>
+                      <div className="mt-2 rounded-lg bg-secondary/70 px-3 py-2 text-[13px] leading-relaxed">
+                        <span className="text-muted-foreground">Reason: </span>
+                        {e.reason}
+                      </div>
                     )}
                     {batch && (
-                      <div className="mt-2">
+                      <div className="mt-3">
                         {batch.undone ? (
-                          <span className="text-xs text-muted-foreground">Batch undone.</span>
+                          <span className="text-xs text-muted-foreground">Already undone.</span>
                         ) : (
                           <Button
                             variant="outline"
-                            size="sm"
+                            className="h-9 rounded-lg"
                             onClick={() => {
                               undoBatch(batch.id);
-                              toast.success(`Batch ${batch.id} undone — ${batch.awardIds.length} awards removed.`);
+                              toast.success(
+                                `Undone. ${batch.awardIds.length} award${batch.awardIds.length === 1 ? "" : "s"} removed.`,
+                              );
                             }}
                           >
-                            <Undo2 className="h-3.5 w-3.5" /> Undo this batch
+                            <Undo2 className="h-4 w-4" /> Undo this batch
                           </Button>
                         )}
                       </div>

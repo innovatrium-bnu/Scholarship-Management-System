@@ -3,13 +3,17 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/scholarship/AppShell";
 import { useStore } from "@/lib/scholarship/store";
 import { ScholarshipForm } from "@/components/scholarship/ScholarshipForm";
+import { HowTo } from "@/components/scholarship/guidance";
 
 export const Route = createFileRoute("/scholarships/create")({
   component: CreateScholarshipPage,
   head: () => ({
     meta: [
-      { title: "Create scholarship — BNU" },
-      { name: "description", content: "Define eligibility, coverage, and governance for a new scholarship." },
+      { title: "Add a scholarship | BNU Scholarships" },
+      {
+        name: "description",
+        content: "Set up a new scholarship: who it is for, what it pays, and how it runs.",
+      },
     ],
   }),
 });
@@ -21,16 +25,41 @@ function CreateScholarshipPage() {
   return (
     <>
       <PageHeader
-        title="Create scholarship"
-        subtitle="Define eligibility, coverage, and governance. You can assign it to students once it's created."
+        back={{ to: "/scholarships", label: "All scholarships" }}
+        title="Add a scholarship"
+        subtitle="Five short steps. Creating it does not give it to anybody. You do that afterwards from Give to students."
       />
-      <div className="px-8 py-6">
+      <div className="space-y-6 px-6 py-6 lg:px-8">
+        <HowTo
+          id="scholarship-create"
+          intro="You will answer five questions, one screen at a time. Each screen tells you what it needs and whether anything on it is compulsory."
+          steps={[
+            {
+              title: "Name it",
+              body: "What it is called, one line about who it is for, and whether BNU or a donor pays.",
+            },
+            {
+              title: "Say who it is for",
+              body: "Which schools, programmes, and batches may be considered. Leave it open for the whole university.",
+            },
+            {
+              title: "Say what it pays",
+              body: "One line per fee. This is the only compulsory part besides the name.",
+            },
+            {
+              title: "Add conditions, then the running details",
+              body: "What a student must do to get it and keep it, then how often it is rechecked and any limit on numbers.",
+            },
+          ]}
+          footer="The panel on the right fills in as you go, so you can always see what you have built so far. Creating the scholarship does not give it to anybody. Do that afterwards from “Give to students”."
+        />
+
         <ScholarshipForm
           isEdit={false}
           onCancel={() => nav({ to: "/scholarships" })}
           onSubmit={(data, reason) => {
             addScholarship(data, reason);
-            toast.success(`${data.name} created`);
+            toast.success(`${data.name} created. You can now give it to students.`);
             nav({ to: "/scholarships" });
           }}
         />

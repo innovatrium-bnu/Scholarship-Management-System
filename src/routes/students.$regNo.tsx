@@ -4,7 +4,6 @@ import { PageHeader } from "@/components/scholarship/AppShell";
 import { useStore } from "@/lib/scholarship/store";
 import { ceilingBreach, computeMerge, feeOf } from "@/lib/scholarship/merge";
 import type { Award, MergedAward, Scholarship } from "@/lib/scholarship/types";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,6 +11,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -42,43 +42,86 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
 import {
   AlertTriangle,
-  ChevronLeft,
   History,
   Pin,
   Plus,
   UserPlus,
   XCircle,
+  GraduationCap,
+  Wallet,
+  Percent,
+  Check,
 } from "lucide-react";
 import { AuditPanel } from "@/components/scholarship/AuditPanel";
-import { pkr, precedenceOf } from "@/components/scholarship/helpers";
+import { HowTo, StepHeading, StepNumber } from "@/components/scholarship/guidance";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  ageOf,
+  longDate,
+  pkr,
+  precedenceOf,
+  semesterLabel,
+  timeAgo,
+  yearLabel,
+} from "@/components/scholarship/helpers";
+import {
+  SectionCard,
+  StatCard,
+  StatusPill,
+  Meter,
+  EmptyState,
+  Callout,
+  HelpTip,
+  Field,
+  StudentPhoto,
+} from "@/components/scholarship/ui-kit";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useScreenedApplications } from "@/lib/scholarship/useApplications";
+import { ApplicationStatusPill, VerdictPill } from "@/components/scholarship/applications";
+import { CalendarDays, ClipboardCheck, IdCard, Mail, Phone, TrendingUp } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 export const Route = createFileRoute("/students/$regNo")({
   component: StudentDetail,
   head: ({ params }) => ({
     meta: [
-      { title: `Student ${(params as { regNo: string }).regNo} — BNU` },
-      { name: "description", content: "Awards, merge breakdown, and coverage per fee head." },
+      { title: `Student ${(params as { regNo: string }).regNo} | BNU Scholarships` },
+      {
+        name: "description",
+        content: "Scholarships, coverage, and fee reductions for one student.",
+      },
       { name: "robots", content: "noindex" },
     ],
   }),
 });
 
-const PRIMARY = "#1B6C8C";
-const GREYS = ["#14556E", "#6B7C8C", "#93C1D4", "#CBD8E0"];
+const SEGMENT_COLORS = ["#1B6C8C", "#2FAE7E", "#F0B429", "#7A8FA6", "#93C1D4"];
+
+/** The three words the merge engine uses, said the way a person would. */
+function statusOf(components: MergedAward["components"]) {
+  if (components.some((c) => c.mergeStatus === "Suppressed"))
+    return { tone: "coral" as const, label: "Not applied" };
+  if (components.some((c) => c.mergeStatus === "Trimmed"))
+    return { tone: "amber" as const, label: "Reduced" };
+  return { tone: "green" as const, label: "Full amount" };
+}
 
 function StudentDetail() {
   const { regNo } = useParams({ from: "/students/$regNo" });
   const nav = useNavigate();
   const { students, awards, scholarships, addAward, revokeAward } = useStore();
   const student = students.find((s) => s.regNo === regNo);
+  const screened = useScreenedApplications();
+  const theirApplications = useMemo(
+    () =>
+      screened
+        .filter((s) => s.app.studentRegNo === regNo)
+        .sort((a, b) => b.app.submittedAt.localeCompare(a.app.submittedAt)),
+    [screened, regNo],
+  );
   const [addOpen, setAddOpen] = useState(false);
   const [assignPickerOpen, setAssignPickerOpen] = useState(false);
   const [revokeFor, setRevokeFor] = useState<Award | null>(null);
@@ -94,11 +137,35 @@ function StudentDetail() {
     [student, active, scholarships],
   );
 
+  const tuitionCovered = merged.reduce(
+    (acc, m) => acc + (m.components.find((c) => c.feeHead === "Tuition")?.appliedPct ?? 0),
+    0,
+  );
+
+  const moneySaved = useMemo(() => {
+    if (!student) return 0;
+    let total = 0;
+    for (const m of merged) {
+      for (const c of m.components) {
+        total += (c.appliedPct / 100) * feeOf(student, c.feeHead) + c.appliedPKR;
+      }
+    }
+    return total;
+  }, [merged, student]);
+
   if (!student) {
     return (
       <div className="p-8">
-        <p className="text-sm text-muted-foreground">Student not found.</p>
-        <Link to="/students" className="text-sm text-primary">← Back to students</Link>
+        <EmptyState
+          icon={AlertTriangle}
+          title="We could not find that student"
+          message="The registration number in the address does not match anyone on record."
+          action={
+            <Button className="h-11 rounded-xl" asChild>
+              <Link to="/students">Back to all students</Link>
+            </Button>
+          }
+        />
       </div>
     );
   }
@@ -115,35 +182,46 @@ function StudentDetail() {
   return (
     <>
       <PageHeader
+        back={{ to: "/students", label: "All students" }}
         title={student.name}
-        subtitle={`${student.regNo} · ${student.programme} · ${student.batch} · CGPA ${student.cgpa.toFixed(2)} · ${student.creditHours} credits`}
+        subtitle={`${student.regNo} · ${student.programme} · ${student.batch} · CGPA ${student.cgpa.toFixed(2)}`}
         action={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setAuditOpen(true)}>
-              <History className="h-4 w-4" /> Audit
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              className="h-11 rounded-xl"
+              onClick={() => setAuditOpen(true)}
+            >
+              <History className="h-4 w-4" /> History
             </Button>
             <Popover open={assignPickerOpen} onOpenChange={setAssignPickerOpen}>
               <PopoverTrigger asChild>
-                <Button variant="outline">
-                  <UserPlus className="h-4 w-4" /> Assign scholarship
+                <Button variant="outline" className="h-11 rounded-xl">
+                  <UserPlus className="h-4 w-4" /> Check eligibility
                 </Button>
               </PopoverTrigger>
-              <PopoverContent align="end" className="w-72 p-2">
-                <div className="text-xs text-muted-foreground px-1 pb-1.5">
-                  Pick a scholarship to run the full eligibility & assignment flow for this student.
-                </div>
-                <div className="max-h-64 overflow-auto space-y-0.5">
-                  {eligible.length === 0 && (
-                    <div className="px-2 py-2 text-xs text-muted-foreground">No further scholarships apply.</div>
-                  )}
+              <PopoverContent align="end" className="w-80 rounded-xl p-2">
+                <p className="px-2 pt-1 pb-2 text-[13px] text-muted-foreground">
+                  Pick a scholarship to run the full rule check for this student.
+                </p>
+                <div className="max-h-64 space-y-0.5 overflow-auto">
+                  {eligible.length === 0 ? (
+                    <p className="px-2 py-3 text-[13px] text-muted-foreground">
+                      There is no other scholarship this student could receive.
+                    </p>
+                  ) : null}
                   {eligible.map((s) => (
                     <button
                       key={s.id}
                       onClick={() => {
                         setAssignPickerOpen(false);
-                        nav({ to: "/assign/$scholarshipId", params: { scholarshipId: s.id }, search: { student: student.regNo } });
+                        nav({
+                          to: "/assign/$scholarshipId",
+                          params: { scholarshipId: s.id },
+                          search: { student: student.regNo },
+                        });
                       }}
-                      className="w-full text-left rounded-md px-2 py-1.5 text-sm hover:bg-secondary/60"
+                      className="w-full rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-secondary"
                     >
                       {s.name}
                     </button>
@@ -151,84 +229,389 @@ function StudentDetail() {
                 </div>
               </PopoverContent>
             </Popover>
-            <Button onClick={() => setAddOpen(true)}>
-              <Plus className="h-4 w-4" /> Add scholarship
+            <Button className="h-11 rounded-xl px-5" onClick={() => setAddOpen(true)}>
+              <Plus className="h-4 w-4" /> Give a scholarship
             </Button>
           </div>
         }
       />
-      <div className="px-8 py-6">
-        <Link to="/students" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-4">
-          <ChevronLeft className="h-3.5 w-3.5" /> All students
-        </Link>
 
-        <div className="grid grid-cols-[1fr_360px] gap-6 items-start">
-          <div className="space-y-6">
-            {/* Awards */}
-            <section>
-              <div className="text-sm font-medium mb-3">Active awards</div>
-              {merged.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border bg-white p-10 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    This student has no active awards.
-                  </p>
-                  <Button className="mt-3" onClick={() => setAddOpen(true)}>
-                    <Plus className="h-4 w-4" /> Add scholarship
-                  </Button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  {merged.map((m) => (
-                    <AwardCard
-                      key={m.award.id}
-                      merged={m}
-                      restored={restoredIds.has(m.award.id)}
-                      onRevoke={() => setRevokeFor(m.award)}
-                      precedence={precedenceOf(scholarships, m.scholarship.id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-
-            {/* Coverage summary bar */}
-            <section>
-              <div className="text-sm font-medium mb-3">Coverage summary</div>
-              <div className="rounded-lg border border-border bg-white p-5 space-y-4">
-                {(["Tuition", "Hostel", "Mess", "Other"] as const).map((head) => (
-                  <CoverageBar
-                    key={head}
-                    head={head}
-                    merged={merged}
-                    baseFee={feeOf(student, head)}
-                    scholarships={scholarships}
-                  />
-                ))}
+      <div className="space-y-6 px-6 py-6 lg:px-8">
+        {/* The profile card comes before anything else. Whoever opens this page
+            is about to make a decision about a person, and the first thing on
+            screen should be that person, not a statistic about them. */}
+        <section className="surface-card overflow-hidden">
+          <div className="flex flex-wrap items-start gap-5 p-6">
+            <StudentPhoto
+              name={student.name}
+              regNo={student.regNo}
+              src={student.photoUrl}
+              size={104}
+            />
+            <div className="min-w-0 flex-1">
+              <h2 className="text-2xl leading-tight font-bold tracking-tight">{student.name}</h2>
+              <p className="tabular mt-1 text-sm text-muted-foreground">
+                {student.regNo} · {student.programme}
+              </p>
+              <p className="mt-0.5 text-sm text-muted-foreground">{student.school}</p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <StatusPill tone={student.enrollmentStatus === "Enrolled" ? "green" : "neutral"}>
+                  {student.enrollmentStatus}
+                </StatusPill>
+                <StatusPill tone="teal">{student.batch} intake</StatusPill>
+                <StatusPill tone="neutral">{student.quota} quota</StatusPill>
+                <StatusPill tone="neutral">{student.studyLevel}</StatusPill>
+                {active.length > 0 ? (
+                  <StatusPill tone="amber">
+                    {active.length} scholarship{active.length === 1 ? "" : "s"}
+                  </StatusPill>
+                ) : null}
               </div>
-            </section>
-
-            {/* Merge breakdown */}
-            <section>
-              <div className="text-sm font-medium mb-3">Merge breakdown — Tuition</div>
-              <MergeTable merged={merged} feeHead="Tuition" scholarships={scholarships} />
-            </section>
+            </div>
           </div>
 
-          {/* Sidebar summary */}
-          <aside className="rounded-lg border border-border bg-white p-5 sticky top-24">
-            <div className="text-xs uppercase text-muted-foreground tracking-wide font-medium mb-3">
-              Snapshot
+          {/* The five figures anyone asks for first, kept together so they can
+              be read in one pass rather than hunted for in a table. */}
+          <dl className="grid grid-cols-2 gap-px border-t border-border bg-border sm:grid-cols-3 lg:grid-cols-5">
+            <HeroStat
+              icon={TrendingUp}
+              label="CGPA"
+              value={student.cgpa.toFixed(2)}
+              hint={`${student.creditsEarned} credits earned`}
+            />
+            <HeroStat
+              icon={CalendarDays}
+              label="Semester"
+              value={String(student.currentSemester)}
+              hint={semesterLabel(student.currentSemester)}
+            />
+            <HeroStat
+              icon={GraduationCap}
+              label="Year of study"
+              value={yearLabel(student.currentSemester).split(" ")[0]!}
+              hint={`Enrolled in ${student.creditHours} credit hours`}
+            />
+            <HeroStat
+              icon={ClipboardCheck}
+              label="Attendance"
+              value={`${student.attendancePct}%`}
+              hint="From the attendance system"
+            />
+            <HeroStat
+              icon={IdCard}
+              label="Age"
+              value={String(ageOf(student.dateOfBirth))}
+              hint={longDate(student.dateOfBirth)}
+            />
+          </dl>
+        </section>
+
+        <Tabs defaultValue="scholarships" className="space-y-6">
+          <TabsList className="h-auto rounded-xl bg-card p-1.5 shadow-sm">
+            <TabsTrigger value="scholarships" className="rounded-lg px-4 py-2 text-sm">
+              Scholarships &amp; fees
+            </TabsTrigger>
+            <TabsTrigger value="information" className="rounded-lg px-4 py-2 text-sm">
+              Student information
+            </TabsTrigger>
+            <TabsTrigger value="applications" className="rounded-lg px-4 py-2 text-sm">
+              Applications
+              {theirApplications.length > 0 ? (
+                <span className="tabular ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-secondary px-1.5 text-[11px] font-bold">
+                  {theirApplications.length}
+                </span>
+              ) : null}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="information" className="space-y-6">
+            <SectionCard
+              title="Identity"
+              subtitle="Admissions data. Every change to these fields is written to the history with the old and new value."
+            >
+              <dl className="grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+                <Field label="Full name" value={student.name} />
+                <Field label="Registration number" value={student.regNo} />
+                <Field label="Father / guardian" value={student.fatherName} />
+                <Field
+                  label="Date of birth"
+                  value={longDate(student.dateOfBirth)}
+                  hint={`${ageOf(student.dateOfBirth)} years old`}
+                />
+                <Field label="Gender" value={student.gender} />
+                <Field label="Quota" value={student.quota} />
+              </dl>
+            </SectionCard>
+
+            <SectionCard title="Academic standing">
+              <dl className="grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+                <Field label="School" value={student.school} className="lg:col-span-2" />
+                <Field label="Programme" value={student.programme} />
+                <Field label="Study level" value={student.studyLevel} />
+                <Field label="Intake" value={student.batch} />
+                <Field label="Admitted" value={longDate(student.admissionDate)} />
+                <Field
+                  label="Current semester"
+                  value={semesterLabel(student.currentSemester)}
+                  hint={yearLabel(student.currentSemester)}
+                />
+                <Field label="CGPA" value={student.cgpa.toFixed(2)} />
+                <Field
+                  label="Credit hours this term"
+                  value={String(student.creditHours)}
+                  hint={`${student.creditsEarned} earned so far`}
+                />
+                <Field
+                  label="Attendance"
+                  value={`${student.attendancePct}%`}
+                  hint="Read-only, owned by the attendance system"
+                />
+                <Field label="Enrollment status" value={student.enrollmentStatus} />
+              </dl>
+            </SectionCard>
+
+            <SectionCard title="Contact and domicile">
+              <dl className="grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+                <Field
+                  label="Email"
+                  value={
+                    <a href={`mailto:${student.email}`} className="hover:text-primary">
+                      <Mail className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />
+                      {student.email}
+                    </a>
+                  }
+                  className="lg:col-span-2"
+                />
+                <Field
+                  label="Phone"
+                  value={
+                    <>
+                      <Phone className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />
+                      {student.phone}
+                    </>
+                  }
+                />
+                <Field label="Province" value={student.province} />
+                <Field label="City" value={student.city} />
+                <Field label="Area" value={student.district} />
+                <Field
+                  label="Domicile"
+                  value={student.domicile}
+                  hint={student.isOutOfStation ? "Out of station" : "Local"}
+                />
+              </dl>
+            </SectionCard>
+
+            <SectionCard
+              title="Fees on record"
+              subtitle="The full fee before any scholarship is applied."
+            >
+              <dl className="grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
+                <Field label="Tuition" value={pkr(student.tuitionFee)} />
+                <Field label="Hostel" value={pkr(student.hostelFee)} />
+                <Field label="Mess" value={pkr(student.messFee)} />
+                <Field label="Other" value={pkr(student.otherFee)} />
+                <Field
+                  label="Total"
+                  value={pkr(
+                    student.tuitionFee + student.hostelFee + student.messFee + student.otherFee,
+                  )}
+                  className="lg:col-span-4"
+                />
+              </dl>
+            </SectionCard>
+          </TabsContent>
+
+          <TabsContent value="applications" className="space-y-4">
+            {theirApplications.length === 0 ? (
+              <div className="surface-card">
+                <EmptyState
+                  icon={ClipboardCheck}
+                  title="No applications on file"
+                  message="This student has never applied for a need-based scholarship. Applications reach this office from the admission portal; they are not raised here."
+                />
+              </div>
+            ) : (
+              theirApplications.map(({ app, screening }) => (
+                <Link
+                  key={app.id}
+                  to="/applications/$id"
+                  params={{ id: app.id }}
+                  className="surface-card surface-card-interactive block p-5"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-[15px] font-semibold">
+                        Need-based scholarship · {app.semester}
+                      </div>
+                      <div className="mt-1 text-[13px] text-muted-foreground">
+                        Reference {app.id} · asked for {app.requestedPct}% of tuition · submitted{" "}
+                        {timeAgo(app.submittedAt)}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ApplicationStatusPill status={app.status} />
+                      {app.status === "Submitted" ? (
+                        <VerdictPill verdict={screening.verdict} />
+                      ) : null}
+                    </div>
+                  </div>
+                  {app.decision ? (
+                    <p className="mt-3 border-t border-border pt-3 text-[13px] leading-relaxed text-muted-foreground">
+                      <span className="font-semibold text-foreground">
+                        {app.decision.outcome}
+                        {app.decision.awardedPct ? ` at ${app.decision.awardedPct}%` : ""}
+                      </span>{" "}
+                      — {app.decision.reason}{" "}
+                      <span className="opacity-75">
+                        ({app.decision.by}, {longDate(app.decision.at)})
+                      </span>
+                    </p>
+                  ) : screening.blockers.length > 0 ? (
+                    <p className="mt-3 border-t border-border pt-3 text-[13px] leading-relaxed text-[var(--stop-ink)]">
+                      {screening.rejectionReason}
+                    </p>
+                  ) : null}
+                </Link>
+              ))
+            )}
+          </TabsContent>
+
+          <TabsContent value="scholarships" className="space-y-6">
+            <HowTo
+              id="student-detail"
+              intro="This is everything the university knows about one student's scholarships. Read it top to bottom before you change anything."
+              steps={[
+                {
+                  title: "Check the three totals",
+                  body: "How many scholarships they hold, how much of their tuition is paid, and what that is worth in rupees.",
+                },
+                {
+                  title: "Read each scholarship card",
+                  body: "A green tag means they get the full amount. An orange tag means it had to be cut back.",
+                },
+                {
+                  title: "See the fee bars",
+                  body: "Coloured means paid by a scholarship, grey means the student still owes it.",
+                },
+                {
+                  title: "Award or take back",
+                  body: "Use the buttons at the top right. Both ask you to confirm and are written into the history.",
+                },
+              ]}
+              footer="If two scholarships together would pay more than 100% of a fee, the system automatically reduces the lower-priority one. That is why some cards say “Reduced”."
+            />
+
+            <StepHeading
+              n={1}
+              title="What this student has at the moment"
+              body="These three numbers cover every scholarship they currently hold, added together."
+            />
+            <div className="grid gap-4 sm:grid-cols-3">
+              <StatCard
+                icon={GraduationCap}
+                tone="teal"
+                label="Scholarships held"
+                value={String(active.length)}
+                hint={active.length === 0 ? "None at the moment" : "Currently in force"}
+              />
+              <StatCard
+                icon={Percent}
+                tone={tuitionCovered >= 100 ? "green" : "amber"}
+                label="Tuition covered"
+                value={`${tuitionCovered}%`}
+                hint={
+                  tuitionCovered >= 100
+                    ? "This student pays no tuition"
+                    : `The student still pays ${100 - tuitionCovered}% of tuition`
+                }
+              />
+              <StatCard
+                icon={Wallet}
+                tone="green"
+                label="Fees not charged"
+                value={pkr(moneySaved)}
+                hint="Across every fee this term"
+              />
             </div>
-            <dl className="space-y-2.5 text-sm">
-              <Row k="School" v={student.school} />
-              <Row k="Domicile" v={student.domicile} />
-              <Row k="Study level" v={student.studyLevel} />
-              <Row k="Tuition fee" v={pkr(student.tuitionFee)} />
-              <Row k="Hostel fee" v={pkr(student.hostelFee)} />
-              <Row k="Active awards" v={String(active.length)} />
-            </dl>
-          </aside>
-        </div>
+
+            <div className="space-y-6">
+              <div className="space-y-6">
+                <section>
+                  <StepHeading
+                    n={2}
+                    title="Scholarships this student holds"
+                    body="One card per scholarship. The tag in the corner tells you whether it pays its full amount, was cut back, or currently pays nothing. Use “Take it back” on a card to end that one scholarship."
+                    className="mb-4"
+                  />
+                  {merged.length === 0 ? (
+                    <div className="surface-card">
+                      <EmptyState
+                        icon={GraduationCap}
+                        title="No scholarship yet"
+                        message="This student is not receiving any fee reduction. You can give them one now."
+                        action={
+                          <Button className="h-11 rounded-xl" onClick={() => setAddOpen(true)}>
+                            <Plus className="h-4 w-4" /> Give a scholarship
+                          </Button>
+                        }
+                      />
+                    </div>
+                  ) : (
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      {merged.map((m) => (
+                        <AwardCard
+                          key={m.award.id}
+                          merged={m}
+                          student={student}
+                          restored={restoredIds.has(m.award.id)}
+                          onRevoke={() => setRevokeFor(m.award)}
+                          precedence={precedenceOf(scholarships, m.scholarship.id)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                <StepHeading
+                  n={3}
+                  title="How much of each fee is covered"
+                  body="One bar per type of fee. Read it left to right: the coloured part is paid for them, the grey part is still their bill."
+                />
+                <SectionCard
+                  title="Every fee, and who pays it"
+                  subtitle="Each colour is a different scholarship. The names and amounts are listed under each bar."
+                  explain="A bar can be shared by several scholarships. Together they can never fill more than the whole bar, because a student cannot be given more than 100% of a fee."
+                >
+                  <div className="space-y-5">
+                    {(["Tuition", "Hostel", "Mess", "Other"] as const).map((head) => (
+                      <CoverageBar
+                        key={head}
+                        head={head}
+                        merged={merged}
+                        baseFee={feeOf(student, head)}
+                        scholarships={scholarships}
+                      />
+                    ))}
+                  </div>
+                </SectionCard>
+
+                <StepHeading
+                  n={4}
+                  title="Check the tuition working, line by line"
+                  body="This is the arithmetic behind the numbers above. If a student or a donor ever asks why an amount changed, the answer is in this table."
+                />
+                <SectionCard
+                  title="Tuition, scholarship by scholarship"
+                  subtitle="What each scholarship promised, and what it actually pays after the 100% limit."
+                  explain="Scholarships are applied in priority order. Once the total reaches 100% there is nothing left for the ones below."
+                >
+                  <MergeTable merged={merged} feeHead="Tuition" scholarships={scholarships} />
+                </SectionCard>
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
 
       {addOpen && (
@@ -256,7 +639,11 @@ function StudentDetail() {
             const before = computeMerge(student, active, scholarships);
             const beforeTrimmed = new Set(
               before
-                .filter((m) => m.components.some((c) => c.mergeStatus === "Trimmed" || c.mergeStatus === "Suppressed"))
+                .filter((m) =>
+                  m.components.some(
+                    (c) => c.mergeStatus === "Trimmed" || c.mergeStatus === "Suppressed",
+                  ),
+                )
                 .map((m) => m.award.id),
             );
             revokeAward(revokeFor.id, reason, effective, timing);
@@ -264,12 +651,15 @@ function StudentDetail() {
             const after = computeMerge(student, remaining, scholarships);
             const restored: string[] = [];
             for (const m of after) {
-              if (beforeTrimmed.has(m.award.id) && m.components.every((c) => c.mergeStatus === "Full")) {
+              if (
+                beforeTrimmed.has(m.award.id) &&
+                m.components.every((c) => c.mergeStatus === "Full")
+              ) {
                 restored.push(m.award.id);
               }
             }
             setRestoredIds(new Set(restored));
-            setTimeout(() => setRestoredIds(new Set()), 1600);
+            setTimeout(() => setRestoredIds(new Set()), 2200);
             const sch = scholarships.find((s) => s.id === revokeFor.scholarshipId);
             const restoredNames = restored
               .map((id) => {
@@ -280,8 +670,8 @@ function StudentDetail() {
               .filter(Boolean);
             toast.success(
               restoredNames.length
-                ? `${sch?.name} revoked. ${restoredNames[0]} restored to its full entitlement.`
-                : `${sch?.name} revoked.`,
+                ? `${sch?.name} taken back. ${restoredNames[0]} now pays its full amount again.`
+                : `${sch?.name} taken back.`,
             );
             setRevokeFor(null);
           }}
@@ -293,107 +683,163 @@ function StudentDetail() {
   );
 }
 
-function Row({ k, v }: { k: string; v: string }) {
+/** One cell of the figure strip under the profile photograph. */
+function HeroStat({
+  icon: Icon,
+  label,
+  value,
+  hint,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  hint?: string;
+}) {
   return (
-    <div className="flex justify-between gap-3">
-      <dt className="text-muted-foreground text-xs">{k}</dt>
-      <dd className="font-medium text-xs tabular text-right">{v}</dd>
+    <div className="bg-card px-5 py-4">
+      <dt className="flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.07em] text-muted-foreground uppercase">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </dt>
+      <dd className="tabular mt-1.5 text-[22px] leading-none font-bold tracking-tight">{value}</dd>
+      {hint ? <p className="mt-1.5 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
 
 function AwardCard({
   merged,
+  student,
   restored,
   onRevoke,
   precedence,
 }: {
   merged: MergedAward;
+  student: { tuitionFee: number; hostelFee: number; messFee: number; otherFee: number };
   restored: boolean;
   onRevoke: () => void;
   precedence: number;
 }) {
   const { award, scholarship, components } = merged;
-  const anyTrimmed = components.some((c) => c.mergeStatus === "Trimmed");
-  const anySuppressed = components.some((c) => c.mergeStatus === "Suppressed");
+  const status = statusOf(components);
+
   return (
     <div
       className={[
-        "rounded-lg border bg-white p-4 transition-all duration-500",
-        restored ? "border-primary shadow-[0_0_0_3px_rgba(13,148,136,0.15)]" : "border-border",
+        "surface-card p-5 transition-all duration-500",
+        restored ? "ring-2 ring-[var(--good)] ring-offset-2" : "",
       ].join(" ")}
     >
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <div className="font-medium truncate">{scholarship.name}</div>
-            <span className="text-[10px] text-muted-foreground shrink-0">v{award.scholarshipVersion}</span>
-          </div>
-          <div className="text-[11px] text-muted-foreground">
-            Precedence #{precedence}
-            {scholarship.fundingSource === "Donor" && scholarship.donorName ? ` · ${scholarship.donorName}` : ""}
+          <div className="truncate text-[15px] font-semibold">{scholarship.name}</div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              Priority #{precedence}
+              <HelpTip title="Priority order">
+                Scholarships are paid in this order. Number 1 is paid in full first; anything below
+                only gets what is left before the fee reaches 100%.
+              </HelpTip>
+            </span>
+            {award.editedByHand ? (
+              <>
+                <span>·</span>
+                <span className="font-medium text-[var(--warn-ink)]">Changed by hand</span>
+              </>
+            ) : null}
+            {scholarship.fundingSource === "Donor" && scholarship.donorName ? (
+              <>
+                <span>·</span>
+                <span>{scholarship.donorName}</span>
+              </>
+            ) : null}
           </div>
         </div>
-        <div className="flex flex-col items-end gap-1">
-          {anyTrimmed && (
-            <Badge className="border-[var(--warning-border)] bg-[var(--warning-bg)] text-[var(--warning)]" variant="outline">
-              Trimmed
-            </Badge>
-          )}
-          {anySuppressed && (
-            <Badge className="border-destructive/40 text-destructive" variant="outline">
-              Suppressed
-            </Badge>
-          )}
-          {!anyTrimmed && !anySuppressed && (
-            <Badge variant="outline" className="border-primary/40 text-primary">Full</Badge>
-          )}
-        </div>
+        <StatusPill tone={status.tone} icon={status.tone === "green" ? Check : undefined}>
+          {status.label}
+        </StatusPill>
       </div>
 
-      <div className="mt-3 space-y-2">
+      {restored ? (
+        <p className="mt-3 rounded-lg bg-[var(--good-tint)] px-3 py-2 text-[13px] font-medium text-[var(--good-ink)]">
+          Restored. This scholarship now pays its full amount again.
+        </p>
+      ) : null}
+
+      <div className="mt-4 space-y-3.5">
         {components.map((c) => {
-          const entLabel =
-            c.kind === "Fixed amount"
-              ? pkr(c.entitlementPKR)
-              : `${c.entitlementPct}%`;
-          const appLabel =
-            c.kind === "Fixed amount"
-              ? pkr(c.appliedPKR)
-              : `${c.appliedPct}%`;
-          const diff = c.kind !== "Fixed amount" ? c.entitlementPct - c.appliedPct : 0;
+          const fixed = c.kind === "Fixed amount";
+          const promised = fixed ? pkr(c.entitlementPKR) : `${c.entitlementPct}%`;
+          const given = fixed ? pkr(c.appliedPKR) : `${c.appliedPct}%`;
+          const cut = !fixed && c.entitlementPct > c.appliedPct;
+          const base =
+            c.feeHead === "Tuition"
+              ? student.tuitionFee
+              : c.feeHead === "Hostel"
+                ? student.hostelFee
+                : c.feeHead === "Mess"
+                  ? student.messFee
+                  : student.otherFee;
+
           return (
-            <div key={c.feeHead} className="text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">{c.feeHead}</span>
-                <div className="flex items-center gap-3 tabular">
-                  <span className="text-muted-foreground">Ent {entLabel}</span>
-                  <span className="font-medium">Applied {appLabel}</span>
-                  {c.isOverridden && (
-                    <span className="inline-flex items-center gap-0.5 text-primary text-[10px]">
-                      <Pin className="h-3 w-3" /> Pinned
+            <div key={c.feeHead}>
+              <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                <span className="text-[13px] font-medium">{c.feeHead}</span>
+                <span className="tabular flex items-baseline gap-2 text-[13px]">
+                  {cut ? (
+                    <span className="text-muted-foreground line-through">{promised}</span>
+                  ) : null}
+                  <span className="font-semibold">{given}</span>
+                  {c.isOverridden ? (
+                    <span className="inline-flex items-center gap-0.5 text-xs font-medium text-primary">
+                      <Pin className="h-3 w-3" /> Locked
                     </span>
-                  )}
-                </div>
+                  ) : null}
+                </span>
               </div>
-              {c.mergeStatus === "Trimmed" && (
-                <div className="text-[11px] text-[var(--warning)] mt-0.5">
-                  Reduced by {diff}% to stay within the {c.feeHead.toLowerCase()} ceiling.
-                </div>
-              )}
-              {c.mergeStatus === "Suppressed" && (
-                <div className="text-[11px] text-destructive mt-0.5">
-                  Suppressed — ceiling already fully allocated.
-                </div>
-              )}
+              {!fixed ? (
+                <Meter
+                  value={c.appliedPct}
+                  size="sm"
+                  tone={
+                    c.mergeStatus === "Suppressed"
+                      ? "neutral"
+                      : c.mergeStatus === "Trimmed"
+                        ? "amber"
+                        : "green"
+                  }
+                />
+              ) : null}
+              {c.mergeStatus === "Trimmed" ? (
+                <p className="mt-1.5 text-xs leading-relaxed text-[var(--warn-ink)]">
+                  Cut back by {c.entitlementPct - c.appliedPct}% because {c.feeHead.toLowerCase()}{" "}
+                  is already covered up to the 100% limit.
+                </p>
+              ) : null}
+              {c.mergeStatus === "Suppressed" ? (
+                <p className="mt-1.5 text-xs leading-relaxed text-[var(--stop-ink)]">
+                  Pays nothing right now, because {c.feeHead.toLowerCase()} is already fully covered
+                  by a higher-priority scholarship.
+                </p>
+              ) : null}
+              {c.mergeStatus === "Full" && !fixed && base > 0 ? (
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Worth {pkr((c.appliedPct / 100) * base)} of the {pkr(base)}{" "}
+                  {c.feeHead.toLowerCase()} fee.
+                </p>
+              ) : null}
             </div>
           );
         })}
       </div>
 
-      <div className="mt-3 pt-3 border-t border-border flex justify-end">
-        <Button variant="ghost" size="sm" onClick={onRevoke} className="text-destructive hover:text-destructive">
-          <XCircle className="h-3.5 w-3.5" /> Revoke
+      <div className="mt-4 flex justify-end border-t border-border pt-4">
+        <Button
+          variant="ghost"
+          className="h-9 rounded-lg text-destructive hover:bg-destructive/5 hover:text-destructive"
+          onClick={onRevoke}
+        >
+          <XCircle className="h-4 w-4" /> Take it back
         </Button>
       </div>
     </div>
@@ -411,7 +857,6 @@ function CoverageBar({
   baseFee: number;
   scholarships: Scholarship[];
 }) {
-  // Percent-based bar. Fixed amounts are added as a separate strip below.
   const segments = merged
     .map((m) => {
       const c = m.components.find((cc) => cc.feeHead === head);
@@ -419,58 +864,73 @@ function CoverageBar({
       return { m, c };
     })
     .filter((x): x is { m: MergedAward; c: MergedAward["components"][number] } => !!x)
-    .sort((a, b) => precedenceOf(scholarships, a.m.scholarship.id) - precedenceOf(scholarships, b.m.scholarship.id));
+    .sort(
+      (a, b) =>
+        precedenceOf(scholarships, a.m.scholarship.id) -
+        precedenceOf(scholarships, b.m.scholarship.id),
+    );
 
   const pctSegments = segments.filter((s) => s.c.kind !== "Fixed amount" && s.c.appliedPct > 0);
   const fixedSegments = segments.filter((s) => s.c.kind === "Fixed amount" && s.c.appliedPKR > 0);
   const totalPct = pctSegments.reduce((a, s) => a + s.c.appliedPct, 0);
+  const fixedTotal = fixedSegments.reduce((a, s) => a + s.c.appliedPKR, 0);
 
   return (
     <div>
-      <div className="flex items-center justify-between text-xs mb-1.5">
-        <div className="font-medium">{head}</div>
-        <div className="tabular text-muted-foreground">
-          {totalPct}% covered
-          {fixedSegments.length > 0
-            ? ` · +${pkr(fixedSegments.reduce((a, s) => a + s.c.appliedPKR, 0))}`
-            : ""}
-          {baseFee > 0 && ` of ${pkr(baseFee)}`}
-        </div>
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <span className="text-sm font-semibold">{head}</span>
+        <span className="tabular text-[13px] text-muted-foreground">
+          {totalPct === 0 && fixedTotal === 0 ? (
+            "Not covered"
+          ) : (
+            <>
+              <span className="font-semibold text-foreground">
+                {totalPct}%{fixedTotal > 0 ? ` + ${pkr(fixedTotal)}` : ""}
+              </span>
+              {baseFee > 0 ? ` covered of the ${pkr(baseFee)} fee` : " covered"}
+            </>
+          )}
+        </span>
       </div>
-      <div className="h-2.5 w-full rounded-full bg-secondary overflow-hidden flex">
+
+      <div className="flex h-3 w-full overflow-hidden rounded-full bg-secondary">
         {pctSegments.map((s, i) => (
           <div
             key={s.m.award.id}
             title={`${s.m.scholarship.name}: ${s.c.appliedPct}%`}
             style={{
               width: `${s.c.appliedPct}%`,
-              background: i === 0 ? PRIMARY : GREYS[(i - 1) % GREYS.length],
+              background: SEGMENT_COLORS[i % SEGMENT_COLORS.length],
             }}
-            className="h-full transition-all duration-500"
+            className="animate-grow-x h-full"
           />
         ))}
       </div>
-      {segments.length > 0 && (
-        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+
+      {segments.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
           {segments.map((s, i) => (
-            <span key={s.m.award.id} className="inline-flex items-center gap-1">
+            <span
+              key={s.m.award.id}
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+            >
               <span
-                className="inline-block h-2 w-2 rounded-sm"
+                className="inline-block h-2.5 w-2.5 rounded-full"
                 style={{
                   background:
                     s.c.kind === "Fixed amount"
-                      ? GREYS[3]
-                      : i === 0
-                        ? PRIMARY
-                        : GREYS[(i - 1) % GREYS.length],
+                      ? "#CBD8E0"
+                      : SEGMENT_COLORS[i % SEGMENT_COLORS.length],
                 }}
               />
-              {s.m.scholarship.name} —{" "}
-              {s.c.kind === "Fixed amount" ? pkr(s.c.appliedPKR) : `${s.c.appliedPct}%`}
+              {s.m.scholarship.name}
+              <span className="tabular font-semibold text-foreground">
+                {s.c.kind === "Fixed amount" ? pkr(s.c.appliedPKR) : `${s.c.appliedPct}%`}
+              </span>
             </span>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -491,51 +951,90 @@ function MergeTable({
       return { m, c };
     })
     .filter((x): x is { m: MergedAward; c: MergedAward["components"][number] } => !!x)
-    .sort((a, b) => precedenceOf(scholarships, a.m.scholarship.id) - precedenceOf(scholarships, b.m.scholarship.id));
+    .sort(
+      (a, b) =>
+        precedenceOf(scholarships, a.m.scholarship.id) -
+        precedenceOf(scholarships, b.m.scholarship.id),
+    );
 
-  const totalEnt = rows.reduce((a, r) => a + (r.c.kind === "Fixed amount" ? 0 : r.c.entitlementPct), 0);
+  const totalEnt = rows.reduce(
+    (a, r) => a + (r.c.kind === "Fixed amount" ? 0 : r.c.entitlementPct),
+    0,
+  );
   const totalApp = rows.reduce((a, r) => a + (r.c.kind === "Fixed amount" ? 0 : r.c.appliedPct), 0);
 
   if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">No awards touching this fee head.</p>;
+    return (
+      <p className="py-4 text-sm text-muted-foreground">
+        No scholarship touches {feeHead.toLowerCase()} for this student.
+      </p>
+    );
   }
 
   return (
-    <div className="rounded-lg border border-border bg-white overflow-hidden shadow-[0_1px_2px_rgba(18,33,46,0.04)]">
+    <div className="-mx-5 -mb-5 overflow-hidden border-t border-border">
       <Table>
         <TableHeader>
-          <TableRow>
-            <TableHead>Scholarship</TableHead>
-            <TableHead className="text-right">Precedence</TableHead>
-            <TableHead className="text-right">Entitlement</TableHead>
-            <TableHead className="text-right">Applied</TableHead>
-            <TableHead>Status</TableHead>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="h-11 pl-5 text-[13px] font-semibold text-foreground">
+              Scholarship
+            </TableHead>
+            <TableHead className="text-right text-[13px] font-semibold text-foreground">
+              Priority
+            </TableHead>
+            <TableHead className="text-right text-[13px] font-semibold text-foreground">
+              <span className="inline-flex items-center gap-1">
+                Promised
+                <HelpTip title="Promised">The amount this scholarship offers on paper.</HelpTip>
+              </span>
+            </TableHead>
+            <TableHead className="text-right text-[13px] font-semibold text-foreground">
+              <span className="inline-flex items-center gap-1">
+                Actually pays
+                <HelpTip title="Actually pays">
+                  What reaches the fee bill after the 100% limit has been applied.
+                </HelpTip>
+              </span>
+            </TableHead>
+            <TableHead className="pr-5 text-[13px] font-semibold text-foreground">Result</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.map(({ m, c }) => (
-            <TableRow key={m.award.id}>
-              <TableCell className="font-medium">
+            <TableRow key={m.award.id} className="border-border">
+              <TableCell className="py-3 pl-5 text-sm font-medium">
                 {m.scholarship.name}
                 {m.scholarship.fundingSource === "Donor" && m.scholarship.donorName ? (
-                  <span className="text-muted-foreground font-normal"> · {m.scholarship.donorName}</span>
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    Paid by {m.scholarship.donorName}
+                  </span>
                 ) : null}
               </TableCell>
-              <TableCell className="text-right tabular">{precedenceOf(scholarships, m.scholarship.id)}</TableCell>
-              <TableCell className="text-right tabular">{c.kind === "Fixed amount" ? pkr(c.entitlementPKR) : `${c.entitlementPct}%`}</TableCell>
-              <TableCell className="text-right tabular">{c.kind === "Fixed amount" ? pkr(c.appliedPKR) : `${c.appliedPct}%`}</TableCell>
-              <TableCell>
-                <StatusBadge status={c.mergeStatus} pinned={c.isOverridden} />
+              <TableCell className="tabular text-right text-sm">
+                #{precedenceOf(scholarships, m.scholarship.id)}
+              </TableCell>
+              <TableCell className="tabular text-right text-sm text-muted-foreground">
+                {c.kind === "Fixed amount" ? pkr(c.entitlementPKR) : `${c.entitlementPct}%`}
+              </TableCell>
+              <TableCell className="tabular text-right text-sm font-semibold">
+                {c.kind === "Fixed amount" ? pkr(c.appliedPKR) : `${c.appliedPct}%`}
+              </TableCell>
+              <TableCell className="pr-5">
+                <ResultBadge status={c.mergeStatus} pinned={c.isOverridden} />
               </TableCell>
             </TableRow>
           ))}
-          <TableRow className="bg-[var(--surface)] font-medium">
-            <TableCell></TableCell>
-            <TableCell></TableCell>
-            <TableCell className="text-right tabular">{totalEnt}%</TableCell>
-            <TableCell className="text-right tabular">{totalApp}%</TableCell>
-            <TableCell className="text-xs text-muted-foreground">
-              {totalApp >= 100 ? "At ceiling" : `${100 - totalApp}% headroom`}
+          <TableRow className="border-border bg-secondary/50 hover:bg-secondary/50">
+            <TableCell className="py-3 pl-5 text-sm font-semibold">Total</TableCell>
+            <TableCell />
+            <TableCell className="tabular text-right text-sm text-muted-foreground">
+              {totalEnt}%
+            </TableCell>
+            <TableCell className="tabular text-right text-sm font-bold">{totalApp}%</TableCell>
+            <TableCell className="pr-5 text-[13px] text-muted-foreground">
+              {totalApp >= 100
+                ? "Nothing left to give, already at the 100% limit"
+                : `${100 - totalApp}% of tuition still unpaid`}
             </TableCell>
           </TableRow>
         </TableBody>
@@ -544,21 +1043,18 @@ function MergeTable({
   );
 }
 
-function StatusBadge({ status, pinned }: { status: string; pinned: boolean }) {
-  const style =
-    status === "Trimmed"
-      ? "border-[var(--warning-border)] bg-[var(--warning-bg)] text-[var(--warning)]"
-      : status === "Suppressed"
-        ? "border-destructive/40 text-destructive"
-        : "border-primary/40 text-primary";
+function ResultBadge({ status, pinned }: { status: string; pinned: boolean }) {
+  const label =
+    status === "Trimmed" ? "Reduced" : status === "Suppressed" ? "Not applied" : "Full amount";
+  const tone = status === "Trimmed" ? "amber" : status === "Suppressed" ? "coral" : "green";
   return (
-    <div className="flex items-center gap-1.5">
-      <Badge variant="outline" className={style}>{status}</Badge>
-      {pinned && (
-        <span className="text-[10px] text-primary inline-flex items-center gap-0.5">
-          <Pin className="h-3 w-3" /> Pinned
+    <div className="flex items-center gap-2">
+      <StatusPill tone={tone}>{label}</StatusPill>
+      {pinned ? (
+        <span className="inline-flex items-center gap-0.5 text-xs font-medium text-primary">
+          <Pin className="h-3 w-3" /> Locked
         </span>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -574,7 +1070,22 @@ function AddScholarshipDialog({
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  student: { regNo: string; tuitionFee: number; hostelFee: number; messFee: number; otherFee: number; school: string; studyLevel: string; batch: string; cgpa: number; creditHours: number; domicile: string; isOutOfStation: boolean; name: string; programme: string };
+  student: {
+    regNo: string;
+    tuitionFee: number;
+    hostelFee: number;
+    messFee: number;
+    otherFee: number;
+    school: string;
+    studyLevel: string;
+    batch: string;
+    cgpa: number;
+    creditHours: number;
+    domicile: string;
+    isOutOfStation: boolean;
+    name: string;
+    programme: string;
+  };
   eligible: Scholarship[];
   scholarships: Scholarship[];
   existing: Award[];
@@ -589,12 +1100,11 @@ function AddScholarshipDialog({
   const scholarship = eligible.find((s) => s.id === pick);
   const breach = useMemo(() => {
     if (!scholarship) return null;
-    return ceilingBreach(student as any, existing, { scholarship }, scholarships);
+    return ceilingBreach(student as never, existing, { scholarship }, scholarships);
   }, [scholarship, existing, scholarships, student]);
 
   const hasBreach = !!breach && breach.breachedHeads.length > 0;
 
-  // Build candidate award
   const buildAward = (): Award | null => {
     if (!scholarship) return null;
     const components = scholarship.coverage.map((c) => ({
@@ -611,7 +1121,6 @@ function AddScholarshipDialog({
       id: `aw-${Date.now()}`,
       studentRegNo: student.regNo,
       scholarshipId: scholarship.id,
-      scholarshipVersion: scholarship.version,
       status: "Active",
       components,
       effectiveFrom: new Date().toISOString().slice(0, 10),
@@ -620,121 +1129,175 @@ function AddScholarshipDialog({
     };
   };
 
-  // Live merge preview
   const preview = useMemo(() => {
     const candidate = buildAward();
     if (!candidate) return null;
     const all = [...existing, candidate];
-    return computeMerge(student as any, all, scholarships);
+    return computeMerge(student as never, all, scholarships);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pick, strategy, authority, ref, reason]);
 
   const canApply =
     !!scholarship &&
     (!hasBreach ||
-      (strategy === "trim") ||
+      strategy === "trim" ||
       (strategy === "override" && authority && ref.trim() && reason.trim()));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-h-[88vh] max-w-3xl overflow-y-auto rounded-2xl">
         <DialogHeader>
-          <DialogTitle>Add scholarship</DialogTitle>
+          <DialogTitle className="text-xl">Give {student.name} a scholarship</DialogTitle>
+          <DialogDescription>
+            Three things to do: pick the scholarship, check the table that appears, then press the
+            green button. Nothing is saved until you do.
+          </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Scholarship</Label>
+        <div className="space-y-5">
+          <div>
+            <Label className="mb-1.5 flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
+              <StepNumber n={1} className="h-6 w-6 text-xs" />
+              Which scholarship
+            </Label>
             <Select value={pick} onValueChange={setPick}>
-              <SelectTrigger><SelectValue placeholder="Select a scholarship" /></SelectTrigger>
+              <SelectTrigger className="h-11 rounded-xl">
+                <SelectValue placeholder="Choose a scholarship" />
+              </SelectTrigger>
               <SelectContent>
                 {eligible.map((s) => (
                   <SelectItem key={s.id} value={s.id}>
-                    {s.name} · precedence #{precedenceOf(scholarships, s.id)}
+                    {s.name} · priority #{precedenceOf(scholarships, s.id)}
                   </SelectItem>
                 ))}
-                {eligible.length === 0 && (
-                  <div className="px-3 py-2 text-xs text-muted-foreground">
-                    No further scholarships apply to this student.
+                {eligible.length === 0 ? (
+                  <div className="px-3 py-2 text-[13px] text-muted-foreground">
+                    There is no other scholarship this student could receive.
                   </div>
-                )}
+                ) : null}
               </SelectContent>
             </Select>
           </div>
 
-          {scholarship && (
+          {scholarship ? (
             <>
-              {hasBreach && (
-                <div className="rounded-md p-3 border flex gap-3 items-start" style={{ borderColor: "var(--warning-border)", background: "var(--warning-bg)" }}>
-                  <AlertTriangle className="h-4 w-4 text-[var(--warning)] mt-0.5 shrink-0" />
-                  <div>
-                    <div className="text-sm font-medium text-[var(--warning)]">
-                      Combined {breach!.breachedHeads[0]!.head.toLowerCase()} coverage would be{" "}
-                      {breach!.breachedHeads[0]!.total}%, exceeding the 100% ceiling.
-                    </div>
-                    <div className="text-xs text-[var(--warning)]/80 mt-0.5">
-                      Choose how to resolve the overlap below.
-                    </div>
-                  </div>
-                </div>
-              )}
+              {hasBreach ? (
+                <Callout
+                  tone="amber"
+                  icon={AlertTriangle}
+                  title={`This would take ${breach!.breachedHeads[0]!.head.toLowerCase()} to ${breach!.breachedHeads[0]!.total}%, which is over the 100% limit.`}
+                >
+                  A student can never be given more than the full fee. Pick what should happen
+                  below.
+                </Callout>
+              ) : null}
 
               <div>
-                <div className="text-xs font-medium mb-1.5">Live merge preview — Tuition</div>
-                {preview && <MergeTable merged={preview} feeHead="Tuition" scholarships={scholarships} />}
+                <div className="mb-1 flex items-center gap-2 text-sm font-semibold">
+                  <StepNumber n={2} className="h-6 w-6 text-xs" />
+                  Check what tuition will look like afterwards
+                </div>
+                <p className="mb-2 pl-8 text-[13px] text-muted-foreground">
+                  This is a preview only. Compare the “Promised” and “Actually pays” columns. If
+                  they differ, the 100% limit has cut something back.
+                </p>
+                <div className="surface-card overflow-hidden p-5">
+                  {preview ? (
+                    <MergeTable merged={preview} feeHead="Tuition" scholarships={scholarships} />
+                  ) : null}
+                </div>
               </div>
 
-              {hasBreach && (
-                <RadioGroup value={strategy} onValueChange={(v) => setStrategy(v as any)} className="space-y-2">
-                  <label className="flex items-start gap-2 rounded-md border border-border p-3 cursor-pointer">
+              {hasBreach ? (
+                <RadioGroup
+                  value={strategy}
+                  onValueChange={(v) => setStrategy(v as "trim" | "override")}
+                  className="space-y-2"
+                >
+                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-4 transition-colors hover:border-primary">
                     <RadioGroupItem value="trim" id="trim" className="mt-0.5" />
                     <div>
-                      <Label htmlFor="trim" className="font-medium text-sm">Auto-trim to fit</Label>
-                      <p className="text-xs text-muted-foreground">
-                        The lower-priority award is reduced to the remaining headroom. Others are unaffected.
+                      <Label htmlFor="trim" className="text-sm font-semibold">
+                        Cut back the lower-priority scholarship
+                      </Label>
+                      <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
+                        Recommended. The scholarship further down the priority list is reduced so
+                        the total stops at 100%. Nothing else changes.
                       </p>
                     </div>
                   </label>
-                  <label className="flex items-start gap-2 rounded-md border border-border p-3 cursor-pointer">
+                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-4 transition-colors hover:border-primary">
                     <RadioGroupItem value="override" id="override" className="mt-0.5" />
                     <div className="flex-1">
-                      <Label htmlFor="override" className="font-medium text-sm">Override the ceiling</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Pin this coverage line at its full entitlement. Requires authority and reference.
+                      <Label htmlFor="override" className="text-sm font-semibold">
+                        Go past the limit anyway
+                      </Label>
+                      <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
+                        Only if someone in authority has approved it. You must record who approved
+                        it and their order number.
                       </p>
-                      {strategy === "override" && (
-                        <div className="mt-3 grid grid-cols-2 gap-3">
+                      {strategy === "override" ? (
+                        <div className="mt-4 grid grid-cols-2 gap-3">
                           <div className="col-span-2">
-                            <Label className="text-xs text-muted-foreground">Authority</Label>
+                            <Label className="mb-1.5 block text-[13px] text-muted-foreground">
+                              Who approved it
+                            </Label>
                             <Select value={authority} onValueChange={setAuthority}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectTrigger className="h-11 rounded-xl">
+                                <SelectValue />
+                              </SelectTrigger>
                               <SelectContent>
-                                {["Vice Chancellor", "Dean", "Hardship Committee", "Donor agreement"].map((a) => (
-                                  <SelectItem key={a} value={a}>{a}</SelectItem>
+                                {[
+                                  "Vice Chancellor",
+                                  "Dean",
+                                  "Hardship Committee",
+                                  "Donor agreement",
+                                ].map((a) => (
+                                  <SelectItem key={a} value={a}>
+                                    {a}
+                                  </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
                           </div>
                           <div>
-                            <Label className="text-xs text-muted-foreground">Reference</Label>
-                            <Input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="e.g. VC Order 2025/09" />
+                            <Label className="mb-1.5 block text-[13px] text-muted-foreground">
+                              Order number
+                            </Label>
+                            <Input
+                              className="h-11 rounded-xl"
+                              value={ref}
+                              onChange={(e) => setRef(e.target.value)}
+                              placeholder="e.g. VC Order 2025/09"
+                            />
                           </div>
                           <div>
-                            <Label className="text-xs text-muted-foreground">Reason</Label>
-                            <Input value={reason} onChange={(e) => setReason(e.target.value)} />
+                            <Label className="mb-1.5 block text-[13px] text-muted-foreground">
+                              Reason
+                            </Label>
+                            <Input
+                              className="h-11 rounded-xl"
+                              value={reason}
+                              onChange={(e) => setReason(e.target.value)}
+                              placeholder="Why this was allowed"
+                            />
                           </div>
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   </label>
                 </RadioGroup>
-              )}
+              ) : null}
             </>
-          )}
+          ) : null}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="outline" className="h-11 rounded-xl" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
           <Button
+            className="h-11 rounded-xl px-6"
             disabled={!canApply}
             onClick={() => {
               const a = buildAward();
@@ -742,14 +1305,14 @@ function AddScholarshipDialog({
               onApply(
                 a,
                 hasBreach && strategy === "override"
-                  ? `${scholarship.name} awarded with ceiling override.`
+                  ? `${scholarship.name} given, past the 100% limit.`
                   : hasBreach
-                    ? `${scholarship.name} awarded; a lower-priority award was trimmed.`
-                    : `${scholarship.name} awarded.`,
+                    ? `${scholarship.name} given. A lower-priority scholarship was cut back.`
+                    : `${scholarship.name} given.`,
               );
             }}
           >
-            Apply
+            Give this scholarship
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -768,55 +1331,76 @@ function RevokeDialog({
   onOpenChange: (o: boolean) => void;
   onConfirm: (reason: string, effective: string, timing: "immediate" | "next") => void;
 }) {
+  void award;
   const [reason, setReason] = useState("");
   const [effective, setEffective] = useState("Fall 2025");
   const [timing, setTiming] = useState<"immediate" | "next">("immediate");
+
   return (
-    <AlertDialog open={true} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+    <AlertDialog open onOpenChange={onOpenChange}>
+      <AlertDialogContent className="rounded-2xl">
         <AlertDialogHeader>
-          <AlertDialogTitle>Revoke {scholarship.name}?</AlertDialogTitle>
+          <AlertDialogTitle className="text-xl">Take back {scholarship.name}?</AlertDialogTitle>
           <AlertDialogDescription>
-            Any award that was trimmed to make room for this one will recompute and may be restored.
+            The student stops receiving it. If another scholarship was cut back to make room for
+            this one, it will go back to its full amount automatically.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div>
-            <Label className="text-xs text-muted-foreground">Reason</Label>
-            <Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
+            <Label className="mb-1.5 block text-[13px] font-medium text-muted-foreground">
+              Why are you taking it back? <span className="text-destructive">Required</span>
+            </Label>
+            <Textarea
+              rows={2}
+              className="rounded-xl"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. CGPA fell below the required 3.0"
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-xs text-muted-foreground">Effective from</Label>
+              <Label className="mb-1.5 block text-[13px] font-medium text-muted-foreground">
+                Starting from
+              </Label>
               <Select value={effective} onValueChange={setEffective}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-11 rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {["Fall 2025", "Spring 2026", "Fall 2026"].map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label className="text-xs text-muted-foreground">Timing</Label>
-              <Select value={timing} onValueChange={(v) => setTiming(v as any)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Label className="mb-1.5 block text-[13px] font-medium text-muted-foreground">
+                When it takes effect
+              </Label>
+              <Select value={timing} onValueChange={(v) => setTiming(v as "immediate" | "next")}>
+                <SelectTrigger className="h-11 rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="immediate">Immediate</SelectItem>
-                  <SelectItem value="next">Next session</SelectItem>
+                  <SelectItem value="immediate">Right away</SelectItem>
+                  <SelectItem value="next">From the next semester</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
         </div>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel className="h-11 rounded-xl">Keep it</AlertDialogCancel>
           <AlertDialogAction
             disabled={!reason.trim()}
             onClick={() => onConfirm(reason, effective, timing)}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            className="h-11 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            Revoke
+            Yes, take it back
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

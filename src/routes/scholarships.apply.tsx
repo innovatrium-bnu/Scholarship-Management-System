@@ -1,18 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/scholarship/AppShell";
 import { useStore } from "@/lib/scholarship/store";
 import { ScholarshipsTable } from "@/components/scholarship/ScholarshipsTable";
 import { useScholarshipRowActions } from "@/components/scholarship/useScholarshipRowActions";
-import { Search } from "lucide-react";
+import { SearchField, ResultCount, Callout } from "@/components/scholarship/ui-kit";
+import { HowTo, StepHeading } from "@/components/scholarship/guidance";
+import { Info } from "lucide-react";
 
 export const Route = createFileRoute("/scholarships/apply")({
   component: ApplyScholarshipsPage,
   head: () => ({
     meta: [
-      { title: "Apply scholarships — BNU" },
-      { name: "description", content: "Assign a scholarship to students, a cohort, or the whole university." },
+      { title: "Give a scholarship to students | BNU Scholarships" },
+      {
+        name: "description",
+        content: "Assign a scholarship to students, a cohort, or the whole university.",
+      },
     ],
   }),
 });
@@ -28,7 +32,8 @@ function ApplyScholarshipsPage() {
       .filter((s) => s.name.toLowerCase().includes(q.toLowerCase()))
       .map((s) => ({
         ...s,
-        activeAwards: awards.filter((a) => a.scholarshipId === s.id && a.status === "Active").length,
+        activeAwards: awards.filter((a) => a.scholarshipId === s.id && a.status === "Active")
+          .length,
         totalAwards: awards.filter((a) => a.scholarshipId === s.id).length,
       }));
   }, [scholarships, awards, q]);
@@ -36,24 +41,63 @@ function ApplyScholarshipsPage() {
   return (
     <>
       <PageHeader
-        title="Apply scholarships"
-        subtitle="Pick a scholarship to run the eligibility check and assign it to students."
+        title="Give a scholarship to students"
+        subtitle="Pick the scholarship you want to hand out. The next screen walks you through choosing who gets it."
       />
-      <div className="px-8 py-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="relative w-72">
-            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search scholarships"
-              className="pl-9 bg-white"
-            />
+      <div className="space-y-5 px-6 py-6 lg:px-8">
+        <HowTo
+          id="scholarships-apply"
+          intro="Handing out a scholarship happens in two halves: first pick the scholarship here, then answer four questions on the next screen."
+          steps={[
+            {
+              title: "Find the scholarship",
+              body: "Only scholarships that are still open appear here. Retired ones cannot be given out.",
+            },
+            {
+              title: "Press “Give to students”",
+              body: "This opens the four-step form. You can stop and come back at any point before the end.",
+            },
+            {
+              title: "Choose who, and whether to check the rules",
+              body: "Everyone, a group such as one batch, or particular students you pick by name.",
+            },
+            {
+              title: "Review the list, then confirm",
+              body: "You see every student, whether they qualify, and what their fees will look like afterwards.",
+            },
+          ]}
+          footer="Nothing is saved until the very last button. Even then, an Undo appears for twelve seconds and the whole batch stays undoable from the history."
+        />
+
+        <Callout tone="teal" icon={Info} title="Nothing is awarded until you confirm">
+          You will see exactly who qualifies, who does not, and why, before anything is saved. You
+          can undo the whole batch afterwards.
+        </Callout>
+
+        <StepHeading
+          n={1}
+          title="Pick the scholarship you want to hand out"
+          body="Search for it by name, then press the green “Give to students” button on its row."
+        />
+
+        <div className="surface-card flex flex-wrap items-center gap-4 p-4">
+          <SearchField
+            value={q}
+            onChange={setQ}
+            placeholder="Search by name"
+            className="w-full max-w-sm"
+          />
+          <div className="ml-auto">
+            <ResultCount n={rows.length} noun="ready to give out" />
           </div>
-          <div className="text-xs text-muted-foreground ml-auto">{rows.length} active scholarships</div>
         </div>
 
-        <ScholarshipsTable rows={rows} mode="apply" {...handlers} />
+        <ScholarshipsTable
+          rows={rows}
+          mode="apply"
+          emptyMessage="Only scholarships that are still open can be given out. Retired ones are hidden here."
+          {...handlers}
+        />
       </div>
 
       {dialogs}

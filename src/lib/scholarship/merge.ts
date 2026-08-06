@@ -1,11 +1,4 @@
-import type {
-  Award,
-  FeeHead,
-  MergedAward,
-  MergedComponent,
-  Scholarship,
-  Student,
-} from "./types";
+import type { Award, FeeHead, MergedAward, MergedComponent, Scholarship, Student } from "./types";
 
 export function feeOf(student: Student, head: FeeHead): number {
   switch (head) {
@@ -89,8 +82,7 @@ export function computeMerge(
     // Sort non-pinned by scholarship priority ascending (1 = highest).
     nonPinned.sort(
       (a, b) =>
-        (precedence.get(a.m.scholarship.id) ?? 99) -
-        (precedence.get(b.m.scholarship.id) ?? 99),
+        (precedence.get(a.m.scholarship.id) ?? 99) - (precedence.get(b.m.scholarship.id) ?? 99),
     );
 
     // Assign pinned first.

@@ -5,29 +5,38 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Design system definition.
+ * ---------------------------------------------------------------------------
+ * BNU Scholarships design system
+ * ---------------------------------------------------------------------------
  *
- * The @theme inline block maps CSS custom properties to Tailwind utility
- * classes (e.g. --color-primary -> bg-primary, text-primary).
+ * Audience: Registrar Office staff who are not confident software users.
+ * The system is tuned for that, not for density:
  *
- * The :root and .dark blocks define the actual color values using oklch.
- * All colors MUST use oklch format.
+ *   1. Nothing meaningful is smaller than 12px, body copy is 14px.
+ *   2. Every foreground/background pair clears WCAG AA (4.5:1).
+ *   3. Status is always colour + word + shape, never colour alone.
+ *   4. Four accent hues carry meaning consistently across the whole app:
+ *        teal   = the thing itself / neutral-positive
+ *        green  = good, full, granted
+ *        amber  = needs attention, reduced, pending
+ *        coral  = blocked, removed, lost
  *
- * To add a new semantic color:
- * 1. Add the variable to :root (light value) and .dark (dark value)
- * 2. Register it in @theme inline as --color-<name>: var(--<name>)
+ * The @theme inline block maps CSS custom properties to Tailwind utilities
+ * (--color-primary -> bg-primary, text-primary).
  */
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
-  --radius-3xl: calc(var(--radius) + 12px);
-  --radius-4xl: calc(var(--radius) + 16px);
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 6px);
+  --radius-lg: calc(var(--radius) - 4px);
+  --radius-xl: var(--radius);
+  --radius-2xl: calc(var(--radius) + 4px);
+  --radius-3xl: calc(var(--radius) + 8px);
+  --radius-4xl: calc(var(--radius) + 12px);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
@@ -59,97 +68,170 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
   --color-label: var(--label-foreground);
   --color-primary-light: var(--primary-light);
   --color-primary-tint: var(--primary-tint);
+  --color-primary-soft: var(--primary-soft);
+
+  --color-good: var(--good);
+  --color-good-tint: var(--good-tint);
+  --color-good-ink: var(--good-ink);
+  --color-warn: var(--warn);
+  --color-warn-tint: var(--warn-tint);
+  --color-warn-ink: var(--warn-ink);
+  --color-stop: var(--stop);
+  --color-stop-tint: var(--stop-tint);
+  --color-stop-ink: var(--stop-ink);
+  --color-info: var(--info);
+  --color-info-tint: var(--info-tint);
+  --color-info-ink: var(--info-ink);
+
   --color-series-1: var(--series-1);
   --color-series-2: var(--series-2);
   --color-series-3: var(--series-3);
   --color-series-4: var(--series-4);
+  --color-series-5: var(--series-5);
 }
 
 :root {
-  --radius: 0.75rem;
-  /* BNU Vitals — white / light blue-grey / steel navy */
-  --background: #f7f9fb;
-  --foreground: #12212e;
+  /* 16px card radius. The references are all noticeably rounder than a
+     stock admin theme, and softness reads as "safe to touch". */
+  --radius: 1rem;
+
+  /* Neutrals: cool paper background, pure white cards for max separation. */
+  --background: #f2f6f9;
+  --foreground: #0f2233;
   --surface: #ffffff;
   --card: #ffffff;
-  --card-foreground: #12212e;
+  --card-foreground: #0f2233;
   --popover: #ffffff;
-  --popover-foreground: #12212e;
+  --popover-foreground: #0f2233;
+
+  /* Brand (BNU steel teal). 5.9:1 on white, safe for text and buttons. */
   --primary: #1b6c8c;
-  --primary-hover: #14556e;
+  --primary-hover: #145771;
   --primary-light: #93c1d4;
-  --primary-tint: #edf4f8;
+  --primary-soft: #d3e6ef;
+  --primary-tint: #e9f3f8;
   --primary-foreground: #ffffff;
-  --secondary: #edf2f5;
-  --secondary-foreground: #12212e;
-  --muted: #edf2f5;
-  --muted-foreground: #6b7c8c;
-  --label-foreground: #8896a4;
-  --accent: #edf2f5;
-  --accent-foreground: #12212e;
+
+  --secondary: #eaf0f5;
+  --secondary-foreground: #0f2233;
+  --muted: #eef3f7;
+  /* 5.2:1 on the page background. The old #8896a4 was 3.0:1 and failed. */
+  --muted-foreground: #566878;
+  --label-foreground: #566878;
+  --accent: #eaf0f5;
+  --accent-foreground: #0f2233;
+
+  /* Semantic accents. `*-ink` is the AA-safe text colour on `*-tint`. */
+  --good: #2fae7e;
+  --good-tint: #e4f6ef;
+  --good-ink: #116b4c;
+  --warn: #f0b429;
+  --warn-tint: #fdf3dd;
+  --warn-ink: #8a5a05;
+  --stop: #e8663c;
+  --stop-tint: #fdece6;
+  --stop-ink: #b03d18;
+  --info: #1b6c8c;
+  --info-tint: #e9f3f8;
+  --info-ink: #14556e;
+
   --destructive: #b91c1c;
   --destructive-foreground: #ffffff;
-  --warning: #92400e;
-  --warning-bg: #fbf1dc;
-  --warning-border: #e3b871;
-  --border: #e6ecf1;
-  --input: #e6ecf1;
+  /* legacy aliases still referenced by a few inline styles */
+  --warning: var(--warn-ink);
+  --warning-bg: var(--warn-tint);
+  --warning-border: #edd0a0;
+
+  --border: #e2eaf1;
+  --input: #d8e3ec;
   --ring: #1b6c8c;
+
+  /* Chart series, ordered by how easily they separate for colour-blind
+     viewers; never rely on these alone, always pair with a labelled legend. */
   --series-1: #1b6c8c;
   --series-2: #e8663c;
   --series-3: #2fae7e;
   --series-4: #f0b429;
-  --chart-1: #1b6c8c;
-  --chart-2: #e8663c;
-  --chart-3: #2fae7e;
-  --chart-4: #f0b429;
-  --chart-5: #93c1d4;
+  --series-5: #7a8fa6;
+  --chart-1: var(--series-1);
+  --chart-2: var(--series-2);
+  --chart-3: var(--series-3);
+  --chart-4: var(--series-4);
+  --chart-5: var(--series-5);
+  --grid: #e7eef4;
+
   --sidebar: #ffffff;
-  --sidebar-foreground: #12212e;
+  --sidebar-foreground: #0f2233;
   --sidebar-primary: #1b6c8c;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #edf4f8;
-  --sidebar-accent-foreground: #12212e;
-  --sidebar-border: #e6ecf1;
+  --sidebar-accent: #e9f3f8;
+  --sidebar-accent-foreground: #0f2233;
+  --sidebar-border: #e2eaf1;
   --sidebar-ring: #1b6c8c;
+
+  /* Elevation: two soft layers rather than one hard border. */
+  --shadow-sm: 0 1px 2px rgba(15, 34, 51, 0.05);
+  --shadow-card: 0 1px 3px rgba(15, 34, 51, 0.04), 0 6px 20px -8px rgba(15, 34, 51, 0.1);
+  --shadow-lift: 0 2px 6px rgba(15, 34, 51, 0.06), 0 18px 34px -12px rgba(15, 34, 51, 0.18);
 }
 
 .dark {
-  --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.208 0.042 265.755);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.551 0.027 264.364);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.208 0.042 265.755);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.279 0.041 260.031);
-  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.551 0.027 264.364);
+  --background: #0d1a24;
+  --foreground: #eaf1f6;
+  --surface: #142430;
+  --card: #142430;
+  --card-foreground: #eaf1f6;
+  --popover: #142430;
+  --popover-foreground: #eaf1f6;
+  --primary: #5fb3d1;
+  --primary-hover: #7cc4dd;
+  --primary-light: #2b5d74;
+  --primary-soft: #1b3d4e;
+  --primary-tint: #16303e;
+  --primary-foreground: #06131b;
+  --secondary: #1c2f3c;
+  --secondary-foreground: #eaf1f6;
+  --muted: #1c2f3c;
+  --muted-foreground: #9fb3c2;
+  --label-foreground: #9fb3c2;
+  --accent: #1c2f3c;
+  --accent-foreground: #eaf1f6;
+  --good: #4cc794;
+  --good-tint: #12362a;
+  --good-ink: #8ee3c0;
+  --warn: #f3c359;
+  --warn-tint: #3a2f12;
+  --warn-ink: #f7d68e;
+  --stop: #f08662;
+  --stop-tint: #3a2019;
+  --stop-ink: #f8b39a;
+  --info: #5fb3d1;
+  --info-tint: #16303e;
+  --info-ink: #9ed4e6;
+  --destructive: #e06767;
+  --destructive-foreground: #06131b;
+  --warning: var(--warn-ink);
+  --warning-bg: var(--warn-tint);
+  --warning-border: #5a4a20;
+  --border: #22384a;
+  --input: #2b4356;
+  --ring: #5fb3d1;
+  --grid: #22384a;
+  --sidebar: #142430;
+  --sidebar-foreground: #eaf1f6;
+  --sidebar-primary: #5fb3d1;
+  --sidebar-primary-foreground: #06131b;
+  --sidebar-accent: #16303e;
+  --sidebar-accent-foreground: #eaf1f6;
+  --sidebar-border: #22384a;
+  --sidebar-ring: #5fb3d1;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.35), 0 6px 20px -8px rgba(0, 0, 0, 0.5);
+  --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.4), 0 18px 34px -12px rgba(0, 0, 0, 0.6);
 }
 
 @layer base {
@@ -160,12 +242,106 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family:
+      "Inter",
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      "Segoe UI",
+      sans-serif;
     font-feature-settings: "cv11", "ss01";
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* One visible, generous focus ring everywhere. Keyboard users and
+     low-confidence users both rely on knowing where they are. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  ::selection {
+    background: var(--primary-soft);
+  }
+}
+
+@layer components {
+  /* The one card recipe used across the app. */
+  .surface-card {
+    background-color: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Cards that navigate somewhere lift on hover so the affordance is felt,
+     not just implied by a cursor change. */
+  .surface-card-interactive {
+    transition:
+      box-shadow 180ms ease,
+      transform 180ms ease,
+      border-color 180ms ease;
+  }
+  .surface-card-interactive:hover {
+    box-shadow: var(--shadow-lift);
+    transform: translateY(-2px);
+    border-color: var(--primary-soft);
   }
 
   .tabular {
     font-variant-numeric: tabular-nums;
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer utilities {
+  /* Progress fills and coverage bars grow on mount. Motion draws the eye to
+     the number that matters. Respects reduced-motion below. */
+  @keyframes grow-x {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+  .animate-grow-x {
+    transform-origin: left center;
+    animation: grow-x 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .animate-rise-in {
+    animation: rise-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .surface-card-interactive:hover {
+    transform: none;
   }
 }

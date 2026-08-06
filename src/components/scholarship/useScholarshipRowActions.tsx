@@ -4,6 +4,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -15,7 +16,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
@@ -25,46 +25,50 @@ import { AuditPanel } from "@/components/scholarship/AuditPanel";
 import type { Scholarship } from "@/lib/scholarship/types";
 
 export function useScholarshipRowActions() {
-  const { addScholarship, updateScholarship, archiveScholarship, deleteScholarship } = useStore();
+  const { addScholarship, updateScholarship, archiveScholarship } = useStore();
   const [editing, setEditing] = useState<Scholarship | null>(null);
   const [archiving, setArchiving] = useState<Scholarship | null>(null);
   const [archiveMode, setArchiveMode] = useState("close_new");
-  const [deleting, setDeleting] = useState<Scholarship | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState("");
   const [auditFor, setAuditFor] = useState<Scholarship | null>(null);
 
   const handlers = {
     onEdit: (s: Scholarship) => setEditing(s),
+    /**
+     * Copying is the supported way to change terms for a newer intake: copy,
+     * rename, set the new batches, adjust the amounts. The original keeps its
+     * students and its own rules untouched.
+     */
     onDuplicate: (s: Scholarship) => {
       const copy: Scholarship = {
         ...s,
         id: `sch-${Math.random().toString(36).slice(2, 7)}`,
         name: `${s.name} (copy)`,
-        version: 1,
       };
-      addScholarship(copy, "Duplicated from " + s.name);
-      toast.success(`${copy.name} created`);
+      addScholarship(copy, "Copied from " + s.name);
+      toast.success(`${copy.name} created. Open it to set its batches and amounts.`);
     },
     onArchive: (s: Scholarship) => setArchiving(s),
     onAudit: (s: Scholarship) => setAuditFor(s),
-    onDeleteRequest: (s: Scholarship) => setDeleting(s),
   };
 
   const dialogs = (
     <>
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
-        <DialogContent className="max-w-5xl">
+        <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Edit {editing?.name}</DialogTitle>
+            <DialogTitle className="text-xl">Change {editing?.name}</DialogTitle>
+            <DialogDescription>
+              Work through the five steps. Nothing is saved until you press the button at the end.
+            </DialogDescription>
           </DialogHeader>
           {editing && (
             <ScholarshipForm
               initial={editing}
               isEdit
               onCancel={() => setEditing(null)}
-              onSubmit={(data, reason, migrate) => {
-                updateScholarship(editing.id, data, reason, migrate);
-                toast.success(`Saved version ${editing.version + 1} of ${data.name}`);
+              onSubmit={(data, reason) => {
+                updateScholarship(editing.id, data, reason);
+                toast.success(`${data.name} saved.`);
                 setEditing(null);
               }}
             />
@@ -73,68 +77,51 @@ export function useScholarshipRowActions() {
       </Dialog>
 
       <AlertDialog open={!!archiving} onOpenChange={(o) => !o && setArchiving(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-2xl">
           <AlertDialogHeader>
-            <AlertDialogTitle>Archive {archiving?.name}?</AlertDialogTitle>
+            <AlertDialogTitle className="text-xl">Retire {archiving?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Choose how existing awards should be handled.
+              It will no longer appear when you give scholarships out. Choose what happens to the
+              students who already have it.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <RadioGroup value={archiveMode} onValueChange={setArchiveMode} className="space-y-2">
-            <label className="flex items-start gap-2 rounded-md border border-border p-3 cursor-pointer">
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-4 transition-colors hover:border-primary">
               <RadioGroupItem value="close_new" id="close_new" className="mt-0.5" />
               <div>
-                <Label htmlFor="close_new" className="font-medium">Close to new awards only</Label>
-                <p className="text-xs text-muted-foreground">Existing awards continue to run.</p>
+                <Label htmlFor="close_new" className="text-sm font-semibold">
+                  Let current students keep it
+                </Label>
+                <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
+                  Recommended. Nobody new can be given it, but everyone who has it carries on as
+                  normal.
+                </p>
               </div>
             </label>
-            <label className="flex items-start gap-2 rounded-md border border-border p-3 cursor-pointer">
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-4 transition-colors hover:border-primary">
               <RadioGroupItem value="end_all" id="end_all" className="mt-0.5" />
               <div>
-                <Label htmlFor="end_all" className="font-medium">End existing awards from Fall 2025</Label>
-                <p className="text-xs text-muted-foreground">All active awards will move to Revoked.</p>
+                <Label htmlFor="end_all" className="text-sm font-semibold">
+                  End it for everyone from Fall 2025
+                </Label>
+                <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
+                  Every student holding it loses it. Their fees go back up from that semester.
+                </p>
               </div>
             </label>
           </RadioGroup>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel className="h-11 rounded-xl">Cancel</AlertDialogCancel>
             <AlertDialogAction
+              className="h-11 rounded-xl"
               onClick={() => {
                 if (!archiving) return;
                 archiveScholarship(archiving.id, archiveMode === "end_all", "Fall 2025");
-                toast.success(`${archiving.name} archived`);
+                toast.success(`${archiving.name} is now retired.`);
                 setArchiving(null);
               }}
             >
-              Archive
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={!!deleting} onOpenChange={(o) => { if (!o) { setDeleting(null); setDeleteConfirm(""); } }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Permanently delete {deleting?.name}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This cannot be undone. Type <strong>{deleting?.name}</strong> to confirm.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <Input value={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.value)} />
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={deleteConfirm !== deleting?.name}
-              onClick={() => {
-                if (!deleting) return;
-                deleteScholarship(deleting.id);
-                toast.success(`${deleting.name} deleted`);
-                setDeleting(null);
-                setDeleteConfirm("");
-              }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Delete
+              Retire it
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

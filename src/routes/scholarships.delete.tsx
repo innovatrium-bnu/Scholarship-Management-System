@@ -1,61 +1,15 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { Input } from "@/components/ui/input";
-import { PageHeader } from "@/components/scholarship/AppShell";
-import { useStore } from "@/lib/scholarship/store";
-import { ScholarshipsTable } from "@/components/scholarship/ScholarshipsTable";
-import { useScholarshipRowActions } from "@/components/scholarship/useScholarshipRowActions";
-import { Search } from "lucide-react";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
+/**
+ * The old "Remove a scholarship" page.
+ *
+ * Deleting is gone: a scholarship that has ever been awarded is part of a
+ * student's financial record, so destroying it destroys history. Retiring does
+ * the same job reversibly, and lives on the Retired scholarships page. Anyone
+ * arriving here from a bookmark is sent there rather than shown a dead end.
+ */
 export const Route = createFileRoute("/scholarships/delete")({
-  component: DeleteScholarshipsPage,
-  head: () => ({
-    meta: [
-      { title: "Delete scholarships — BNU" },
-      { name: "description", content: "Permanently remove a scholarship. Scholarships with awards cannot be deleted." },
-    ],
-  }),
+  beforeLoad: () => {
+    throw redirect({ to: "/scholarships/archived", replace: true });
+  },
 });
-
-function DeleteScholarshipsPage() {
-  const { scholarships, awards } = useStore();
-  const [q, setQ] = useState("");
-  const { handlers, dialogs } = useScholarshipRowActions();
-
-  const rows = useMemo(() => {
-    return scholarships
-      .filter((s) => s.name.toLowerCase().includes(q.toLowerCase()))
-      .map((s) => ({
-        ...s,
-        activeAwards: awards.filter((a) => a.scholarshipId === s.id && a.status === "Active").length,
-        totalAwards: awards.filter((a) => a.scholarshipId === s.id).length,
-      }));
-  }, [scholarships, awards, q]);
-
-  return (
-    <>
-      <PageHeader
-        title="Delete scholarships"
-        subtitle="Scholarships that already have awards can't be deleted — archive them instead."
-      />
-      <div className="px-8 py-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="relative w-72">
-            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search scholarships"
-              className="pl-9 bg-white"
-            />
-          </div>
-          <div className="text-xs text-muted-foreground ml-auto">{rows.length} scholarships</div>
-        </div>
-
-        <ScholarshipsTable rows={rows} mode="delete" {...handlers} />
-      </div>
-
-      {dialogs}
-    </>
-  );
-}
