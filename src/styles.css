@@ -99,8 +99,9 @@
      stock admin theme, and softness reads as "safe to touch". */
   --radius: 1rem;
 
-  /* Neutrals: cool paper background, pure white cards for max separation. */
-  --background: #f2f6f9;
+  /* Neutrals: white page, white cards. Cards no longer separate by fill, so
+     `.surface-card` carries the separation on its border and shadow alone. */
+  --background: #ffffff;
   --foreground: #0f2233;
   --surface: #ffffff;
   --card: #ffffff;
@@ -119,7 +120,7 @@
   --secondary: #eaf0f5;
   --secondary-foreground: #0f2233;
   --muted: #eef3f7;
-  /* 5.2:1 on the page background. The old #8896a4 was 3.0:1 and failed. */
+  /* 5.7:1 on the white page background. The old #8896a4 was 3.0:1 and failed. */
   --muted-foreground: #566878;
   --label-foreground: #566878;
   --accent: #eaf0f5;

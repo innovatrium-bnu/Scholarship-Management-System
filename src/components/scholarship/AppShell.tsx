@@ -157,8 +157,17 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen bg-background text-foreground">
       <aside className="sticky top-0 flex h-screen w-[264px] shrink-0 flex-col border-r border-border bg-[var(--sidebar)]">
         <Link to="/" className="flex items-center gap-3 px-5 py-5">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white ring-1 ring-border">
-            <img src="/favicon.jpg" alt="" className="h-full w-full object-contain" />
+          {/* The logo file is a flat JPEG: black mark, white ground, no alpha. At
+              40px the black mass reads as a dark blob against the white sidebar.
+              Inverting it and screening it over the brand tile knocks the ground
+              out (screen maps black to the backdrop) and leaves the mark white,
+              so the logo sits in the same teal as the rest of the chrome. */}
+          <span className="isolate flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary">
+            <img
+              src="/favicon.jpg"
+              alt=""
+              className="h-full w-full object-contain p-1.5 invert mix-blend-screen"
+            />
           </span>
           <span className="leading-tight">
             <span className="block text-[15px] font-bold">Scholarships</span>
