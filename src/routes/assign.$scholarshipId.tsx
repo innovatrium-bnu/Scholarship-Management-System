@@ -1,9 +1,31 @@
 import { createFileRoute, Link, useParams, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useStore } from "@/lib/scholarship/store";
 import { evaluate, type EvalResult, type EvalStatus } from "@/lib/scholarship/evaluate";
 import { computeMerge } from "@/lib/scholarship/merge";
-import type { Award, Scholarship, Student } from "@/lib/scholarship/types";
+import {
+  AWARD_RATES,
+  EMPTY_RATE_PLAN,
+  NOT_PAID,
+  batchPct,
+  batchRate,
+  clearAllStudentRates,
+  clearStudentRates,
+  describeRatePlan,
+  hasCustomBatchRates,
+  hasOwnRates,
+  pctOfHead,
+  rateHeads,
+  resolveCoverage,
+  setBatchRate,
+  setStudentRate,
+  standardPctOf,
+  studentPct,
+  studentRate,
+  studentsWithOwnRates,
+  type RatePlan,
+} from "@/lib/scholarship/rates";
+import type { Award, FeeHead, Scholarship, Student } from "@/lib/scholarship/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Table,
   TableBody,
@@ -43,7 +66,9 @@ import {
   ArrowRight,
   Check,
   CheckCircle2,
+  ChevronDown,
   Circle,
+  RotateCcw,
   Users,
   X,
 } from "lucide-react";
@@ -68,18 +93,6 @@ type WhoMode = "all" | "cohort" | "individual";
 type HowMode = "evaluate" | "direct";
 type Resolution = "trim" | "skip" | "override";
 
-/**
- * The rates the committee actually awards at.
- *
- * A scholarship carries one headline rate, but the committee routinely grants
- * a partial one — half the tuition to a student whose need is real but less
- * acute, a quarter to spread a fixed pot further. Before this they had to
- * award the full rate and then edit each student's amounts by hand afterwards,
- * which is the same decision recorded twice and a chance to forget the second
- * half.
- */
-const AWARD_RATES = [25, 50, 75, 100] as const;
-
 /* Step names describe what you do there, not what the code does. */
 const STEP_LABELS = ["Choose who", "See who qualifies", "Check and confirm", "Done"] as const;
 
@@ -87,7 +100,7 @@ function AssignFlow() {
   const { scholarshipId } = useParams({ from: "/assign/$scholarshipId" });
   const search = Route.useSearch();
   const nav = useNavigate();
-  const { scholarships, students, awards, assignBatch, undoBatch } = useStore();
+  const { scholarships, students, awards, feeHeads, assignBatch, undoBatch } = useStore();
   const scholarship = scholarships.find((s) => s.id === scholarshipId);
 
   const [step, setStep] = useState<Step>(1);
@@ -111,36 +124,30 @@ function AssignFlow() {
   const [overrideReason, setOverrideReason] = useState("");
   const [showOnlyConflicts, setShowOnlyConflicts] = useState(false);
   const [committedBatchId, setCommittedBatchId] = useState<string | null>(null);
-  const [customPct, setCustomPct] = useState<number | null>(null);
+  /* What was actually saved, which is not `selected.size`: a quota, a clash or
+     a fee set to nothing can each drop somebody between the tick and the save. */
+  const [committedCount, setCommittedCount] = useState(0);
+  const [ratePlan, setRatePlan] = useState<RatePlan>(EMPTY_RATE_PLAN);
 
   /**
-   * What this batch actually pays.
+   * What this batch pays one particular student.
    *
-   * `customPct` replaces the tuition percentage only. Hostel, mess and any
-   * fixed-amount line are left exactly as the scholarship defines them —
-   * setting a rate is a decision about how much of the fee to forgive, not a
-   * licence to quietly rewrite the rest of the terms.
+   * Everything downstream — the conflict arithmetic, the table, the award
+   * components written on commit — goes through here, so a rate the committee
+   * set by hand cannot be applied in one place and forgotten in another. That
+   * was the bug in the old single-rate version: the ceiling check read the
+   * chosen rate while the "afterwards" column still showed the scholarship's.
    */
-  const effectiveCoverage = useMemo(() => {
-    if (!scholarship) return [];
-    if (customPct === null) return scholarship.coverage;
-    return scholarship.coverage.map((c) =>
-      c.feeHead === "Tuition" && c.benefitKind !== "Fixed amount"
-        ? { ...c, benefitKind: "Percentage" as const, value: customPct }
-        : c,
-    );
-  }, [scholarship, customPct]);
+  const coverageFor = useCallback(
+    (regNo: string) => (scholarship ? resolveCoverage(scholarship, feeHeads, ratePlan, regNo) : []),
+    [scholarship, feeHeads, ratePlan],
+  );
 
-  /** The tuition rate this batch will award at, whichever way it was set. */
-  const tuitionPct = useMemo(() => {
-    const line = effectiveCoverage.find((c) => c.feeHead === "Tuition");
-    if (!line) return 0;
-    return line.benefitKind === "Full waiver"
-      ? 100
-      : line.benefitKind === "Percentage"
-        ? line.value
-        : 0;
-  }, [effectiveCoverage]);
+  /** How much of this student's tuition this batch would add. */
+  const tuitionPctFor = useCallback(
+    (regNo: string) => pctOfHead(coverageFor(regNo), "Tuition"),
+    [coverageFor],
+  );
 
   const cohortProgrammeOptions = useMemo(() => {
     const schools = cohort.school !== "all" ? [cohort.school] : SCHOOLS;
@@ -207,9 +214,10 @@ function AssignFlow() {
       const existing = awards.filter(
         (a) => a.studentRegNo === r.student.regNo && a.status === "Active",
       );
-      /* Reads the rate the committee actually chose, so lowering it to 25%
-         clears the conflicts that awarding at 100% would have caused. */
-      const add = tuitionPct;
+      /* Reads the rate this student is actually being given, so lowering one
+         of them to 25% clears the conflict that awarding at 100% would have
+         caused, and only for them. */
+      const add = tuitionPctFor(r.student.regNo);
       if (add === 0) continue;
       let existingPct = 0;
       for (const a of existing) {
@@ -222,7 +230,22 @@ function AssignFlow() {
       if (existingPct + add > 100) set.add(r.student.regNo);
     }
     return set;
-  }, [evaluated, awards, scholarship, tuitionPct]);
+  }, [evaluated, awards, scholarship, tuitionPctFor]);
+
+  /**
+   * Students whose every fee has been set to nothing.
+   *
+   * Reachable now that each fee can be turned off one student at a time, and it
+   * has to be named rather than quietly tolerated: an award with no components
+   * is a scholarship on somebody's record that pays them zero, which reads as a
+   * mistake to everyone who sees it afterwards. They are left out of the batch,
+   * and the review screen says so before the button is pressed.
+   */
+  const paysNothing = useMemo(() => {
+    const set = new Set<string>();
+    for (const reg of selected) if (coverageFor(reg).length === 0) set.add(reg);
+    return set;
+  }, [selected, coverageFor]);
 
   if (!scholarship) {
     return (
@@ -243,7 +266,8 @@ function AssignFlow() {
 
   const quota = scholarship.quotaPerCohort;
   const quotaExceeded = quota != null && buckets.Eligible.length > quota;
-  const canCommit = selected.size > 0 && (how === "evaluate" || directReason.trim().length > 0);
+  const canCommit =
+    selected.size > paysNothing.size && (how === "evaluate" || directReason.trim().length > 0);
 
   const commit = () => {
     const chosen = evaluated.filter((r) => selected.has(r.student.regNo));
@@ -255,7 +279,9 @@ function AssignFlow() {
       .map((r) => {
         const inConflict = conflictSet.has(r.student.regNo);
         if (inConflict && resolution === "skip") return null;
-        const components: Award["components"] = effectiveCoverage.map((c) => ({
+        const coverage = coverageFor(r.student.regNo);
+        if (coverage.length === 0) return null;
+        const components: Award["components"] = coverage.map((c) => ({
           feeHead: c.feeHead,
           entitlement: c.value,
           entitlementKind: c.benefitKind,
@@ -279,10 +305,16 @@ function AssignFlow() {
 
     const base = how === "direct" ? directReason : "Given after checking the rules";
     /* A rate the committee set by hand is the single most contested thing about
-       an award, so it goes in the reason the audit log records, not only in the
-       amounts. */
-    const reason =
-      customPct === null ? base : `${base} · awarded at ${customPct}% of tuition by decision`;
+       an award, so a summary of it goes in the reason the audit log records.
+       Every figure it mentions is also a number on an award component, which is
+       where anything counting them reads it from. */
+    const note = describeRatePlan(
+      scholarship,
+      feeHeads,
+      ratePlan,
+      picks.map((p) => p.student.regNo),
+    );
+    const reason = note ? `${base} · ${note}` : base;
     const batchId = assignBatch(
       scholarshipId,
       picks,
@@ -290,6 +322,7 @@ function AssignFlow() {
       reason,
     );
     setCommittedBatchId(batchId);
+    setCommittedCount(picks.length);
     setStep(4);
     const trimmedCount = picks.filter(
       (p) => conflictSet.has(p.student.regNo) && resolution === "trim",
@@ -570,9 +603,11 @@ function AssignFlow() {
             awards={awards}
             scholarships={scholarships}
             cohortLabel={who === "cohort" && cohort.batch !== "all" ? cohort.batch : undefined}
-            customPct={customPct}
-            setCustomPct={setCustomPct}
-            tuitionPct={tuitionPct}
+            feeHeads={feeHeads}
+            ratePlan={ratePlan}
+            setRatePlan={setRatePlan}
+            tuitionPctFor={tuitionPctFor}
+            paysNothing={paysNothing}
           />
         )}
 
@@ -580,7 +615,7 @@ function AssignFlow() {
           <SuccessStep
             batchId={committedBatchId}
             scholarship={scholarship}
-            countAssigned={selected.size}
+            countAssigned={committedCount}
             trimmed={
               [...selected].filter((r) => conflictSet.has(r) && resolution === "trim").length
             }
@@ -603,11 +638,17 @@ function AssignFlow() {
               {step === 3 ? (
                 <>
                   About to give it to{" "}
-                  <span className="font-semibold text-foreground">{selected.size}</span> student
-                  {selected.size === 1 ? "" : "s"}
+                  <span className="font-semibold text-foreground">
+                    {selected.size - paysNothing.size}
+                  </span>{" "}
+                  student
+                  {selected.size - paysNothing.size === 1 ? "" : "s"}
                   {resolution === "trim" &&
                   [...selected].filter((r) => conflictSet.has(r)).length > 0
                     ? ` · ${[...selected].filter((r) => conflictSet.has(r)).length} will have another scholarship cut back`
+                    : ""}
+                  {studentsWithOwnRates(ratePlan, selected).length > 0
+                    ? ` · ${studentsWithOwnRates(ratePlan, selected).length} at their own rate`
                     : ""}
                   .
                 </>
@@ -646,8 +687,9 @@ function AssignFlow() {
               )}
               {step === 3 && (
                 <Button className="h-11 rounded-xl px-6" onClick={commit} disabled={!canCommit}>
-                  <Check className="h-4 w-4" /> Give it to {selected.size} student
-                  {selected.size === 1 ? "" : "s"}
+                  <Check className="h-4 w-4" /> Give it to {selected.size - paysNothing.size}{" "}
+                  student
+                  {selected.size - paysNothing.size === 1 ? "" : "s"}
                 </Button>
               )}
             </div>
@@ -854,102 +896,326 @@ function BucketPreview({
   );
 }
 
+/** One rate button in the batch row. Pressed state is what tells you the answer. */
+function RateButton({
+  active,
+  onClick,
+  children,
+  wide,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  wide?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "tabular h-10 rounded-xl border text-[13px] font-semibold transition-colors",
+        wide ? "px-3.5" : "w-16",
+        active
+          ? "border-primary bg-primary text-primary-foreground shadow-sm"
+          : "border-border bg-card text-foreground hover:border-primary",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 /**
- * How much of the tuition this batch pays.
+ * What this batch pays on every fee, for everyone in it.
  *
- * Defaults to the scholarship's own rate and says so, because that is the
- * right answer almost every time. Choosing a different one is deliberate,
- * applies to everyone in this batch, and is written into the audit reason.
+ * Each fee starts on whatever the scholarship says and states that plainly,
+ * because that is the right answer almost every time. Moving one is deliberate
+ * and written into the audit reason. Fees the scholarship never mentioned are
+ * listed too, switched off: a scholarship that covers only tuition is still the
+ * right vehicle when the committee has decided to pay somebody's hostel, and
+ * pretending otherwise only sends the work to a second screen.
+ *
+ * Nothing here touches a student who has been set individually in the table
+ * below — those were separate decisions and a sweep of the batch rate must not
+ * silently undo them.
  */
-function RatePicker({
+function BatchRatesCard({
   scholarship,
-  customPct,
-  setCustomPct,
-  tuitionPct,
-  count,
+  feeHeads,
+  plan,
+  setPlan,
+  selected,
 }: {
   scholarship: Scholarship;
-  customPct: number | null;
-  setCustomPct: (v: number | null) => void;
-  tuitionPct: number;
-  count: number;
+  feeHeads: readonly FeeHead[];
+  plan: RatePlan;
+  setPlan: (p: RatePlan) => void;
+  selected: Set<string>;
 }) {
-  const line = scholarship.coverage.find((c) => c.feeHead === "Tuition");
-  if (!line || line.benefitKind === "Fixed amount") return null;
+  const heads = rateHeads(scholarship, feeHeads);
+  if (heads.length === 0) return null;
 
-  const standard = line.benefitKind === "Full waiver" ? 100 : line.value;
+  const individual = studentsWithOwnRates(plan, selected).length;
+  const custom = hasCustomBatchRates(scholarship, feeHeads, plan);
 
   return (
     <section className="surface-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
           <h3 className="flex items-center gap-1.5 text-[15px] font-semibold">
-            How much tuition to pay
-            <HelpTip title="How much tuition to pay">
-              Every student in this batch is awarded at the rate you pick. To give different
-              students different amounts, award them in separate batches, or change one student's
-              amounts by hand afterwards.
+            How much of each fee to pay
+            <HelpTip title="How much of each fee to pay">
+              These rates apply to everyone in this batch. To give one student something different,
+              change their rate in the Rate column of the list below — that student then keeps their
+              own rate whatever you do here.
             </HelpTip>
           </h3>
           <p className="mt-1 text-[13px] text-muted-foreground">
-            {scholarship.name} normally pays {standard}% of tuition. Pick a different rate if the
-            committee has decided on one.
+            {scholarship.name} normally pays {describeStandard(scholarship, heads)}. Change a rate
+            here if the committee has decided on one.
           </p>
         </div>
-        {customPct !== null ? (
+        {custom ? (
           <StatusPill tone="amber">Set by hand</StatusPill>
         ) : (
-          <StatusPill tone="teal">Standard rate</StatusPill>
+          <StatusPill tone="teal">Standard rates</StatusPill>
         )}
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => setCustomPct(null)}
-          aria-pressed={customPct === null}
-          className={cn(
-            "h-11 rounded-xl border px-4 text-sm font-semibold transition-colors",
-            customPct === null
-              ? "border-primary bg-primary text-primary-foreground shadow-sm"
-              : "border-border bg-card text-foreground hover:border-primary",
+      <div className="mt-4">
+        {heads.map((head) => {
+          const standard = standardPctOf(scholarship, head);
+          const chosen = batchRate(plan, head);
+          return (
+            <div
+              key={head}
+              className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border py-3 first:border-t-0 first:pt-0"
+            >
+              <div className="min-w-[9rem]">
+                <div className="text-sm font-semibold">{head}</div>
+                <div className="text-xs text-muted-foreground">
+                  {standard == null
+                    ? "Not normally paid by this scholarship"
+                    : `Normally ${standard}%`}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <RateButton
+                  wide
+                  active={chosen === null}
+                  onClick={() => setPlan(setBatchRate(plan, head, null))}
+                >
+                  {standard == null ? "Standard · none" : `Standard · ${standard}%`}
+                </RateButton>
+                {AWARD_RATES.map((pct) => (
+                  <RateButton
+                    key={pct}
+                    active={chosen === pct}
+                    onClick={() => setPlan(setBatchRate(plan, head, pct))}
+                  >
+                    {pct}%
+                  </RateButton>
+                ))}
+                <RateButton
+                  wide
+                  active={chosen === NOT_PAID}
+                  onClick={() => setPlan(setBatchRate(plan, head, NOT_PAID))}
+                >
+                  Not paid
+                </RateButton>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border pt-3">
+        <p className="text-[13px] text-muted-foreground">
+          {selected.size === 0 ? (
+            "Nobody is selected yet."
+          ) : individual === 0 ? (
+            <>
+              All <span className="font-semibold text-foreground">{selected.size}</span> selected
+              student{selected.size === 1 ? "" : "s"} will be paid at these rates.
+            </>
+          ) : (
+            <>
+              <span className="font-semibold text-foreground">{selected.size - individual}</span> of
+              the {selected.size} selected students will be paid at these rates. The other{" "}
+              {individual} {individual === 1 ? "was" : "were"} set individually below and{" "}
+              {individual === 1 ? "keeps" : "keep"} their own.
+            </>
           )}
-        >
-          Standard · {standard}%
-        </button>
-        {AWARD_RATES.map((pct) => (
+        </p>
+        {individual > 0 ? (
           <button
-            key={pct}
             type="button"
-            onClick={() => setCustomPct(pct)}
-            aria-pressed={customPct === pct}
-            className={cn(
-              "tabular h-11 w-20 rounded-xl border text-sm font-semibold transition-colors",
-              customPct === pct
-                ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                : "border-border bg-card text-foreground hover:border-primary",
-            )}
+            onClick={() => setPlan(clearAllStudentRates(plan))}
+            className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-primary underline underline-offset-2"
           >
-            {pct}%
+            <RotateCcw className="h-3.5 w-3.5" />
+            Put everyone back on these rates
           </button>
-        ))}
+        ) : null}
       </div>
-
-      <p className="mt-3 text-[13px] text-muted-foreground">
-        {count === 0 ? (
-          "Nobody is selected yet."
-        ) : (
-          <>
-            All <span className="font-semibold text-foreground">{count}</span> selected student
-            {count === 1 ? "" : "s"} will be awarded{" "}
-            <span className="font-semibold text-foreground">{tuitionPct}% of tuition</span>
-            {customPct !== null && customPct !== standard
-              ? `, not the usual ${standard}%. The reason is recorded against the batch.`
-              : "."}
-          </>
-        )}
-      </p>
     </section>
+  );
+}
+
+/** "50% of tuition and all of hostel", for the sentence under the heading. */
+function describeStandard(scholarship: Scholarship, heads: readonly FeeHead[]): string {
+  const parts: string[] = [];
+  for (const head of heads) {
+    const pct = standardPctOf(scholarship, head);
+    if (pct == null || pct === 0) continue;
+    parts.push(`${pct === 100 ? "all" : `${pct}%`} of ${head.toLowerCase()}`);
+  }
+  if (parts.length === 0) return "nothing on its own";
+  if (parts.length === 1) return parts[0];
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+/**
+ * One student's rate on one fee.
+ *
+ * "Batch rate" is a real option rather than an implied default, so putting a
+ * student back is one choice in the same list that took them out of it, and the
+ * label always says what following the batch currently means.
+ */
+function StudentRateSelect({
+  head,
+  value,
+  batchValue,
+  onChange,
+  label,
+  className,
+}: {
+  head: FeeHead;
+  value: number | null;
+  batchValue: number;
+  onChange: (pct: number | null) => void;
+  label: string;
+  className?: string;
+}) {
+  return (
+    <Select
+      value={value === null ? "batch" : String(value)}
+      onValueChange={(v) => onChange(v === "batch" ? null : Number(v))}
+    >
+      <SelectTrigger
+        aria-label={label}
+        className={cn("tabular h-9 rounded-lg bg-card text-[13px]", className)}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="batch">
+          Batch rate · {batchValue === NOT_PAID ? "none" : `${batchValue}%`}
+        </SelectItem>
+        {AWARD_RATES.map((pct) => (
+          <SelectItem key={pct} value={String(pct)}>
+            {pct}% of {head.toLowerCase()}
+          </SelectItem>
+        ))}
+        <SelectItem value={String(NOT_PAID)}>Do not pay {head.toLowerCase()}</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
+/**
+ * The Rate cell: the headline fee inline, the rest a click away.
+ *
+ * Tuition is the fee that changes on nearly every need-based award, so it is a
+ * dropdown you can reach without opening anything. Hostel and mess move far
+ * less often and would cost the table its legibility if each had a column, so
+ * they sit behind one button that says how many there are and whether any of
+ * them has been touched.
+ */
+function StudentRateCell({
+  scholarship,
+  student,
+  primary,
+  others,
+  plan,
+  setPlan,
+}: {
+  scholarship: Scholarship;
+  student: Student;
+  primary: FeeHead;
+  others: FeeHead[];
+  plan: RatePlan;
+  setPlan: (p: RatePlan) => void;
+}) {
+  const own = hasOwnRates(plan, student.regNo);
+  const othersSet = others.filter((h) => studentRate(plan, student.regNo, h) !== null);
+
+  return (
+    <div className="space-y-1.5">
+      <StudentRateSelect
+        head={primary}
+        className="w-[10.5rem]"
+        label={`${primary} rate for ${student.name}`}
+        value={studentRate(plan, student.regNo, primary)}
+        batchValue={batchPct(scholarship, plan, primary)}
+        onChange={(pct) => setPlan(setStudentRate(plan, student.regNo, primary, pct))}
+      />
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {others.length > 0 ? (
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  "inline-flex items-center gap-1 text-xs font-medium transition-colors hover:text-primary",
+                  othersSet.length > 0 ? "text-[var(--warn-ink)]" : "text-muted-foreground",
+                )}
+              >
+                {othersSet.length > 0
+                  ? othersSet
+                      .map((h) => `${h} ${studentPct(scholarship, plan, h, student.regNo)}%`)
+                      .join(" · ")
+                  : `${others.length} other fee${others.length === 1 ? "" : "s"}`}
+                <ChevronDown className="h-3 w-3" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-80 rounded-xl p-4">
+              <div className="text-sm font-semibold">{student.name}</div>
+              <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
+                Set what this student gets on each fee. Everyone else in the batch is unaffected.
+              </p>
+              <div className="mt-3 space-y-2">
+                {[primary, ...others].map((head) => (
+                  <div key={head} className="flex items-center justify-between gap-3">
+                    <span className="text-[13px] font-medium">{head}</span>
+                    <StudentRateSelect
+                      head={head}
+                      className="w-[10.5rem]"
+                      label={`${head} rate for ${student.name}`}
+                      value={studentRate(plan, student.regNo, head)}
+                      batchValue={batchPct(scholarship, plan, head)}
+                      onChange={(pct) => setPlan(setStudentRate(plan, student.regNo, head, pct))}
+                    />
+                  </div>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
+        ) : null}
+
+        {own ? (
+          <button
+            type="button"
+            onClick={() => setPlan(clearStudentRates(plan, student.regNo))}
+            className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-primary"
+          >
+            <RotateCcw className="h-3 w-3" /> Batch rates
+          </button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -974,9 +1240,11 @@ function ReviewStep(props: {
   awards: Award[];
   scholarships: Scholarship[];
   cohortLabel?: string;
-  customPct: number | null;
-  setCustomPct: (v: number | null) => void;
-  tuitionPct: number;
+  feeHeads: readonly FeeHead[];
+  ratePlan: RatePlan;
+  setRatePlan: (p: RatePlan) => void;
+  tuitionPctFor: (regNo: string) => number;
+  paysNothing: Set<string>;
 }) {
   const {
     evaluated,
@@ -992,10 +1260,18 @@ function ReviewStep(props: {
     scholarship,
     awards,
     scholarships,
-    customPct,
-    setCustomPct,
-    tuitionPct,
+    feeHeads,
+    ratePlan,
+    setRatePlan,
+    tuitionPctFor,
+    paysNothing,
   } = props;
+
+  /* Tuition leads because it is the fee that actually varies student by
+     student; the rest live behind the button in the same cell. */
+  const heads = rateHeads(scholarship, feeHeads);
+  const primaryHead = heads.includes("Tuition") ? "Tuition" : heads[0];
+  const otherHeads = heads.filter((h) => h !== primaryHead);
 
   const conflictCount = evaluated.filter(
     (r) => conflictSet.has(r.student.regNo) && selected.has(r.student.regNo),
@@ -1043,17 +1319,28 @@ function ReviewStep(props: {
         n={3}
         total={4}
         title="Check the list, then confirm"
-        body={`Everyone with a tick will receive ${scholarship.name}. Go down the list and untick anyone who should not get it. The last column shows what their tuition will look like afterwards.`}
+        body={`Everyone with a tick will receive ${scholarship.name}. Go down the list and untick anyone who should not get it. Use the Rate column to give one student a different amount from the rest, and the last column shows what their tuition will look like afterwards.`}
         footer="This is the last screen before anything is saved. The button at the bottom right tells you exactly how many students you are about to award."
       />
 
-      <RatePicker
+      <BatchRatesCard
         scholarship={scholarship}
-        customPct={customPct}
-        setCustomPct={setCustomPct}
-        tuitionPct={tuitionPct}
-        count={selected.size}
+        feeHeads={feeHeads}
+        plan={ratePlan}
+        setPlan={setRatePlan}
+        selected={selected}
       />
+
+      {paysNothing.size > 0 && (
+        <Callout
+          tone="amber"
+          icon={AlertTriangle}
+          title={`${paysNothing.size} ticked student${paysNothing.size === 1 ? " is" : "s are"} set to receive nothing.`}
+        >
+          Every fee is set to “not paid”, so there is no award to make and they will be left out of
+          this batch. Give them a rate in the Rate column, or untick them.
+        </Callout>
+      )}
 
       {conflictCount > 0 && (
         <div className="rounded-2xl border border-[var(--warn)]/45 bg-[var(--warn-tint)] p-5">
@@ -1182,11 +1469,24 @@ function ReviewStep(props: {
               <TableHead className="text-[13px] font-semibold text-foreground">
                 Already has
               </TableHead>
+              {primaryHead ? (
+                <TableHead className="w-52 text-[13px] font-semibold text-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    Rate
+                    <HelpTip title="Rate">
+                      What this one student is paid. Leave it on “Batch rate” and they follow the
+                      rates set above; pick a percentage and it applies to them alone, whatever the
+                      batch rate is changed to later.
+                    </HelpTip>
+                  </span>
+                </TableHead>
+              ) : null}
               <TableHead className="w-48 pr-5 text-[13px] font-semibold text-foreground">
                 <span className="inline-flex items-center gap-1">
                   Tuition afterwards
                   <HelpTip title="Tuition afterwards">
-                    How much of their tuition will be covered once this scholarship is added.
+                    How much of their tuition will be covered once this scholarship is added, at the
+                    rate shown in the previous column.
                   </HelpTip>
                 </span>
               </TableHead>
@@ -1197,13 +1497,9 @@ function ReviewStep(props: {
               const on = selected.has(r.student.regNo);
               const conflict = conflictSet.has(r.student.regNo);
               const cov = totalCoverage(r.student);
-              const tuition = scholarship.coverage.find((c) => c.feeHead === "Tuition");
-              const add =
-                tuition?.benefitKind === "Full waiver"
-                  ? 100
-                  : tuition?.benefitKind === "Percentage"
-                    ? tuition.value
-                    : 0;
+              /* The rate this student is actually being given, not the
+                 scholarship's — those are no longer the same number. */
+              const add = tuitionPctFor(r.student.regNo);
               const names = currentScholarshipNames(r.student);
               const resultingTotal = !conflict
                 ? cov + add
@@ -1251,12 +1547,26 @@ function ReviewStep(props: {
                   <TableCell className="max-w-[12rem] text-[13px] text-muted-foreground">
                     {names.length > 0 ? names.join(", ") : "Nothing"}
                   </TableCell>
+                  {primaryHead ? (
+                    <TableCell>
+                      <StudentRateCell
+                        scholarship={scholarship}
+                        student={r.student}
+                        primary={primaryHead}
+                        others={otherHeads}
+                        plan={ratePlan}
+                        setPlan={setRatePlan}
+                      />
+                    </TableCell>
+                  ) : null}
                   <TableCell className="pr-5">
                     <div className="mb-1.5 flex items-center justify-between gap-2">
                       <span className="tabular text-[13px] font-semibold">
                         {resultingTotal > 0 ? `${resultingTotal}%` : "0%"}
                       </span>
-                      {conflict && resolution === "trim" ? (
+                      {paysNothing.has(r.student.regNo) ? (
+                        <StatusPill tone="coral">Pays nothing</StatusPill>
+                      ) : conflict && resolution === "trim" ? (
                         <StatusPill tone="amber">Cut back</StatusPill>
                       ) : conflict && resolution === "skip" ? (
                         <StatusPill tone="neutral">Skipped</StatusPill>
@@ -1275,7 +1585,10 @@ function ReviewStep(props: {
             })}
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="py-12 text-center text-sm text-muted-foreground">
+                <TableCell
+                  colSpan={primaryHead ? 8 : 7}
+                  className="py-12 text-center text-sm text-muted-foreground"
+                >
                   Nobody to show here.
                 </TableCell>
               </TableRow>

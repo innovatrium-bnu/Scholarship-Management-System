@@ -7,19 +7,26 @@ live in [README.md](README.md) — this file covers what is easy to get wrong.
 
 **1. The money logic is tested. Keep it that way.**
 
-Three pure functions decide things a student feels in their pocket:
+Four pure modules decide things a student feels in their pocket:
 [`merge.ts`](src/lib/scholarship/merge.ts) decides how much fee relief each
 student actually receives,
 [`evaluate.ts`](src/lib/scholarship/evaluate.ts) decides who qualifies for an
-award, and [`screening.ts`](src/lib/scholarship/screening.ts) decides which
-need-based applications are turned down without a person reading them. All
-three are covered by tests (`npm test`).
+award, [`screening.ts`](src/lib/scholarship/screening.ts) decides which
+need-based applications are turned down without a person reading them, and
+[`rates.ts`](src/lib/scholarship/rates.ts) decides what percentage of each fee a
+batch assignment pays, per student. All four are covered by tests (`npm test`).
 
-If you change how awards merge, how eligibility is judged, or what the criteria
-filter rejects, **those tests should fail**. If they still pass, your change was
-not covered — add a case before shipping it. A silent error here means a student
-is charged the wrong amount or refused help they qualified for, and nobody finds
-out for a semester.
+If you change how awards merge, how eligibility is judged, what the criteria
+filter rejects, or how a rate plan resolves, **those tests should fail**. If they
+still pass, your change was not covered — add a case before shipping it. A silent
+error here means a student is charged the wrong amount or refused help they
+qualified for, and nobody finds out for a semester.
+
+`assign` must keep reading `rates.ts` for every figure it shows and every award
+component it writes. The version before it had one rate for the whole batch and
+resolved it in two places, so the ceiling check used the chosen rate while the
+"afterwards" column still showed the scholarship's — the two disagreed on screen
+and nothing caught it.
 
 **1a. The criteria filter sorts; it never decides.**
 
