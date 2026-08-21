@@ -298,6 +298,82 @@ describe("computeMerge", () => {
     });
   });
 
+  it("pays a mayExceedCeiling award in full once the ceiling is already claimed", () => {
+    // The whole point of the flag. Precedence puts the internal award first and
+    // it takes the entire 100%; without the exemption the donor line is
+    // suppressed and the student loses money a donor already agreed to pay.
+    const internal = makeScholarship({ id: "sch-internal" });
+    const donor = makeScholarship({ id: "sch-donor", mayExceedCeiling: true });
+    const awards = [
+      makeAward({
+        id: "aw-1",
+        scholarshipId: "sch-internal",
+        components: [makeComponent("Tuition", "Percentage", 100)],
+      }),
+      makeAward({
+        id: "aw-2",
+        scholarshipId: "sch-donor",
+        components: [makeComponent("Tuition", "Percentage", 40)],
+      }),
+    ];
+
+    const merged = computeMerge(student, awards, [internal, donor]);
+
+    expect(line(merged, "sch-internal")).toMatchObject({ appliedPct: 100, mergeStatus: "Full" });
+    expect(line(merged, "sch-donor")).toMatchObject({
+      appliedPct: 40,
+      entitlementPct: 40,
+      mergeStatus: "Full",
+    });
+  });
+
+  it("does not let a mayExceedCeiling award consume another award's headroom", () => {
+    // Exempt means outside the accounting in both directions. The donor award
+    // sorts first here, and the internal one behind it must still see a full
+    // 100% of headroom rather than 60%.
+    const donor = makeScholarship({ id: "sch-donor", mayExceedCeiling: true });
+    const internal = makeScholarship({ id: "sch-internal" });
+    const awards = [
+      makeAward({
+        id: "aw-1",
+        scholarshipId: "sch-donor",
+        components: [makeComponent("Tuition", "Percentage", 40)],
+      }),
+      makeAward({
+        id: "aw-2",
+        scholarshipId: "sch-internal",
+        components: [makeComponent("Tuition", "Percentage", 100)],
+      }),
+    ];
+
+    const merged = computeMerge(student, awards, [donor, internal]);
+
+    expect(line(merged, "sch-donor")).toMatchObject({ appliedPct: 40, mergeStatus: "Full" });
+    expect(line(merged, "sch-internal")).toMatchObject({ appliedPct: 100, mergeStatus: "Full" });
+  });
+
+  it("keeps a pinned mayExceedCeiling override out of the headroom subtraction", () => {
+    const donor = makeScholarship({ id: "sch-donor", mayExceedCeiling: true });
+    const internal = makeScholarship({ id: "sch-internal" });
+    const awards = [
+      makeAward({
+        id: "aw-1",
+        scholarshipId: "sch-donor",
+        components: [{ ...makeComponent("Tuition", "Percentage", 30), isOverridden: true }],
+      }),
+      makeAward({
+        id: "aw-2",
+        scholarshipId: "sch-internal",
+        components: [makeComponent("Tuition", "Percentage", 100)],
+      }),
+    ];
+
+    const merged = computeMerge(student, awards, [donor, internal]);
+
+    expect(line(merged, "sch-donor")).toMatchObject({ appliedPct: 30, mergeStatus: "Full" });
+    expect(line(merged, "sch-internal")).toMatchObject({ appliedPct: 100, mergeStatus: "Full" });
+  });
+
   it("drops awards whose scholarship is missing rather than throwing", () => {
     const a = makeScholarship({ id: "sch-a" });
     const awards = [
@@ -349,6 +425,33 @@ describe("ceilingBreach", () => {
     const { breachedHeads } = ceilingBreach(student, existing, { scholarship: candidate }, []);
 
     expect(breachedHeads).toEqual([{ head: "Tuition", total: 150 }]);
+  });
+
+  it("reports no breach when the candidate is allowed to exceed the ceiling", () => {
+    const donor = makeScholarship({
+      id: "sch-donor",
+      mayExceedCeiling: true,
+      coverage: [makeCoverage({ feeHead: "Tuition", benefitKind: "Percentage", value: 50 })],
+    });
+    const existing = [makeAward({ components: [makeComponent("Tuition", "Percentage", 70)] })];
+
+    const { breachedHeads } = ceilingBreach(student, existing, { scholarship: donor }, [donor]);
+
+    expect(breachedHeads).toEqual([]);
+  });
+
+  it("leaves an existing exempt award out of the total", () => {
+    const donor = makeScholarship({ id: "sch-donor", mayExceedCeiling: true });
+    const existing = [
+      makeAward({
+        scholarshipId: "sch-donor",
+        components: [makeComponent("Tuition", "Percentage", 70)],
+      }),
+    ];
+
+    const { breachedHeads } = ceilingBreach(student, existing, { scholarship: candidate }, [donor]);
+
+    expect(breachedHeads).toEqual([]);
   });
 
   it("ignores fixed amounts, which do not contest the percentage ceiling", () => {

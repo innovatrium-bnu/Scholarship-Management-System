@@ -1,0 +1,220 @@
+# =============================================================================
+# gitleaks configuration
+#
+# Used by .githooks/pre-commit and, later, by CI.
+#
+# -----------------------------------------------------------------------------
+# WHAT THIS IS ACTUALLY DEFENDING AGAINST
+#
+# Not an attacker. The realistic incident for this project is a colleague, in a
+# hurry, committing one of three things:
+#
+#   1. A .env file, exposing the database password.
+#   2. A database dump or spreadsheet export, exposing real student records.
+#   3. A seed or fixture script populated from real data rather than generated.
+#
+# Number 2 is the serious one. Once a real student record is in git history it
+# is in every clone anybody ever made, and removing it means rewriting history
+# and asking every developer to re-clone.
+#
+# -----------------------------------------------------------------------------
+# WHY SOME RULES ARE LIMITED TO DATA FILES
+#
+# The Scholarship Management System legitimately generates registration numbers
+# like F2025-001 and addresses like name@bnu.edu.pk. Its seed data is produced
+# arithmetically in TypeScript and contains no real person.
+#
+# A rule that flagged those patterns everywhere would fire on correct code
+# several times a day and be switched off within a week, which would leave no
+# protection at all. Limited to data files, the same pattern means something
+# has genuinely gone wrong: a registration number belongs in generated
+# TypeScript, never in a committed .sql, .csv or .xlsx.
+#
+# A rule people keep is worth more than a strict rule people disable.
+# =============================================================================
+
+title = "BNU Scholarship Management System"
+
+[extend]
+# Start from the maintained ruleset: cloud provider keys, private keys, generic
+# high-entropy secrets, and so on. The rules below are additions, not
+# replacements.
+useDefault = true
+
+
+# =============================================================================
+# Student data
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Pakistani CNIC (national identity number), format 12345-1234567-1.
+#
+# Not limited to data files. Nothing anywhere in this project has a legitimate
+# reason to contain a CNIC. The application stores "CNIC" only as the name of a
+# required document type, never a number, so this rule has nothing correct to
+# collide with.
+# -----------------------------------------------------------------------------
+[[rules]]
+id = "bnu-cnic"
+description = "Pakistani CNIC number. Real student identity data must never be committed."
+regex = '''\b\d{5}-\d{7}-\d\b'''
+tags = ["student-data", "pii", "bnu"]
+
+# -----------------------------------------------------------------------------
+# A CNIC field holding digits, in any format, including unformatted 13-digit
+# runs that the rule above would miss.
+# -----------------------------------------------------------------------------
+[[rules]]
+id = "bnu-cnic-field"
+description = "A field named CNIC populated with a number."
+regex = '''(?i)["']?\bcnic\b["']?\s*[:=]\s*["']?\d'''
+tags = ["student-data", "pii", "bnu"]
+
+# -----------------------------------------------------------------------------
+# Student registration numbers, in data files only.
+#
+# The application's own format, from src/lib/scholarship/seed.ts: an F or S,
+# a four digit year, a dash, a sequence number.
+# -----------------------------------------------------------------------------
+[[rules]]
+id = "bnu-registration-number-in-data-file"
+description = "Student registration numbers in a data file. Exports of real student lists do not belong in git."
+regex = '''\b[FS]\d{4}-\d{3,4}\b'''
+path = '''(?i)\.(sql|csv|tsv|xlsx?|ods|dump|bak|ndjson|json)$'''
+tags = ["student-data", "pii", "bnu"]
+
+# -----------------------------------------------------------------------------
+# University email addresses, in data files only.
+# -----------------------------------------------------------------------------
+[[rules]]
+id = "bnu-email-in-data-file"
+description = "bnu.edu.pk addresses in a data file. Likely a real contact list."
+regex = '''[A-Za-z0-9._%+-]+@bnu\.edu\.pk'''
+path = '''(?i)\.(sql|csv|tsv|xlsx?|ods|dump|bak|ndjson|json)$'''
+tags = ["student-data", "pii", "bnu"]
+
+# -----------------------------------------------------------------------------
+# Pakistani mobile numbers, in data files only. Both the international and the
+# local forms.
+# -----------------------------------------------------------------------------
+[[rules]]
+id = "bnu-mobile-number-in-data-file"
+description = "Pakistani mobile numbers in a data file. Likely a real contact list."
+regex = '''(?:\+92[\s-]?3\d{2}|\b03\d{2})[\s-]?\d{7}\b'''
+path = '''(?i)\.(sql|csv|tsv|xlsx?|ods|dump|bak|ndjson|json)$'''
+tags = ["student-data", "pii", "bnu"]
+
+
+# =============================================================================
+# Credentials
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# A database URL with the password inline. The single most common way a
+# production database password reaches a repository.
+# -----------------------------------------------------------------------------
+[[rules]]
+id = "bnu-database-url-with-password"
+description = "Database connection URL containing a password."
+regex = '''(?i)\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis)://[^:@\s/]+:[^@\s/]{3,}@'''
+tags = ["credential"]
+
+# -----------------------------------------------------------------------------
+# A secret assigned in a configuration file.
+#
+# Limited to configuration formats. Applied to source code it would match every
+# schema definition and form field that mentions a password, which is the kind
+# of noise that gets a scanner disabled.
+# -----------------------------------------------------------------------------
+[[rules]]
+id = "bnu-secret-in-config-file"
+description = "A password, secret, or token assigned a literal value in a configuration file."
+regex = '''(?i)\b(password|passwd|pwd|secret|secret_key|token|api[_-]?key|access[_-]?key)\b\s*[:=]\s*["']?[^\s"'#$<>{}]{8,}'''
+path = '''(?i)(^|/)(\.env.*|.*\.(ini|cfg|conf|properties|ya?ml|toml))$'''
+tags = ["credential"]
+
+# -----------------------------------------------------------------------------
+# A Forgejo, Gitea, or GitHub API token.
+#
+# The word has to appear nearby. An unqualified 40-character hex rule would
+# match every git commit SHA mentioned in a document.
+# -----------------------------------------------------------------------------
+[[rules]]
+id = "bnu-forge-api-token"
+description = "Forgejo, Gitea, or GitHub API token."
+regex = '''(?i)\b(forgejo|gitea|github|gitlab)[_-]?(?:api[_-]?)?(?:token|key|secret)\b["'\s:=]{1,12}["']?([0-9a-zA-Z_-]{32,64})'''
+secretGroup = 2
+tags = ["credential"]
+
+# -----------------------------------------------------------------------------
+# Forgejo's own instance secrets, which live in app.ini inside the data volume
+# and must never be copied into the repository.
+# -----------------------------------------------------------------------------
+[[rules]]
+id = "bnu-forgejo-instance-secret"
+description = "Forgejo SECRET_KEY or INTERNAL_TOKEN. These belong in the data volume, never in git."
+regex = '''(?i)\b(SECRET_KEY|INTERNAL_TOKEN|LFS_JWT_SECRET|JWT_SECRET|OAUTH2_JWT_SECRET)\b\s*[:=]\s*["']?[A-Za-z0-9_+/.=-]{20,}'''
+tags = ["credential", "forgejo"]
+
+# -----------------------------------------------------------------------------
+# An LDAP or Active Directory bind password, which the migration to the BNU
+# server will introduce. It belongs in .env and in Forgejo's own settings, not
+# in a runbook or a compose file.
+# -----------------------------------------------------------------------------
+[[rules]]
+id = "bnu-ldap-bind-password"
+description = "LDAP or Active Directory bind password."
+regex = '''(?i)\b(bind[_-]?(?:password|passwd|pw)|ldap[_-]?(?:password|passwd|pw))\b\s*[:=]\s*["']?[^\s"'#$<>{}]{6,}'''
+tags = ["credential", "ldap"]
+
+
+# =============================================================================
+# Allowlist
+#
+# Kept deliberately short. Every entry here is a hole, so each one states why
+# it is safe.
+# =============================================================================
+
+[allowlist]
+description = "Files and patterns that are known safe"
+
+paths = [
+    # This file. It contains every pattern by definition.
+    '''(^|/)\.gitleaks\.toml$''',
+
+    # The committed template. It holds placeholder values and no real ones,
+    # and the pre-commit hook separately refuses any other .env variant.
+    '''(^|/)\.env\.example$''',
+
+    # Dependency lockfiles: thousands of integrity hashes, no secrets, and
+    # never hand-edited.
+    '''(^|/)package-lock\.json$''',
+    '''(^|/)(yarn\.lock|pnpm-lock\.yaml)$''',
+
+    # Test fixtures that are visibly fake by construction:
+    # "Test Guardian", test.student@bnu.edu.pk, +92 300 0000000.
+    '''(^|/)src/lib/scholarship/test-factories\.ts$''',
+
+    # Never scan a dependency tree or a build output.
+    '''(^|/)node_modules/''',
+    '''(^|/)\.output/''',
+    '''(^|/)\.vercel/''',
+    '''(^|/)dist/''',
+]
+
+regexes = [
+    # Documentation placeholders. Every value an administrator has to supply
+    # is written this way, so the runbooks can show a complete example without
+    # tripping the scanner.
+    '''CHANGEME_BNU_[A-Z0-9_]*''',
+
+    # Obvious documentation stand-ins.
+    '''(?i)(example|sample|placeholder|dummy|redacted|your[_-]?(password|secret|token))''',
+    '''(?i)\bchange[_-]?me\b''',
+    '''(?i)xxxxx+''',
+
+    # Example CNIC and phone values used in documentation must be visibly
+    # impossible. Anything ending in a run of zeroes is not a real number.
+    '''\b00000-0000000-0\b''',
+    '''\+92[\s-]?300[\s-]?0000000''',
+]

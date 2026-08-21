@@ -204,19 +204,16 @@ export interface AssignmentBatch {
 /* ------------------------------------------------------------------ roles -- */
 
 /**
- * Who is using the system. There is no authentication yet, so this is chosen
- * from the top bar; when auth lands it comes from the session instead. It
- * drives two things and nothing else: what a screen lets you do, and the name
- * written into the audit log.
+ * Who is using the system. It comes from the signed-in account, and drives two
+ * things and nothing else: what a screen lets you do, and the name written into
+ * the audit log.
+ *
+ * Ordered most privileged first, which is the order the roles are graded in and
+ * the order any list of them should read. See `roles.ts` for what each may do.
  */
-export type Role = "Registrar Office" | "Scholarship Committee" | "Finance" | "Admin";
+export type Role = "Super Admin" | "Admin" | "Data Entry" | "Reporting";
 
-export const ROLES: readonly Role[] = [
-  "Registrar Office",
-  "Scholarship Committee",
-  "Finance",
-  "Admin",
-];
+export const ROLES: readonly Role[] = ["Super Admin", "Admin", "Data Entry", "Reporting"];
 
 /* ----------------------------------------------------- need applications -- */
 

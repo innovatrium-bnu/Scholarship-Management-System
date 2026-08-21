@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { GEOGRAPHY } from "@/lib/scholarship/seed";
+import { useReference } from "@/lib/scholarship/reference";
 import { shortSchool } from "./helpers";
 
 export type Filters = {
@@ -137,6 +137,10 @@ export function MoreFiltersPanel({
   setF: (u: (s: Filters) => Filters) => void;
   scholarships: { id: string; name: string }[];
 }) {
+  // Destructured under the old constant name so every use below reads as it
+  // did when this was a hardcoded array. The values now come from the
+  // geography table.
+  const { geography: GEOGRAPHY } = useReference();
   const set = (k: keyof Filters, v: string) => setF((s) => ({ ...s, [k]: v }));
   const cities = f.province === "all" ? [] : Object.keys(GEOGRAPHY[f.province] ?? {});
   const districts =

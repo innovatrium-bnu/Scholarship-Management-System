@@ -73,10 +73,16 @@ export function computeMerge(
     }
 
     // Percentage headroom = 100% minus pinned percentages.
+    //
+    // A scholarship marked `mayExceedCeiling` sits outside this accounting
+    // altogether, so its pinned lines do not draw on the headroom either. See
+    // the grant loop below for why.
     const pinned = entries.filter((e) => e.isOverridden);
     const nonPinned = entries.filter((e) => !e.isOverridden);
     let pctHeadroom = 100;
-    for (const p of pinned) pctHeadroom -= p.entPct;
+    for (const p of pinned) {
+      if (!p.m.scholarship.mayExceedCeiling) pctHeadroom -= p.entPct;
+    }
     if (pctHeadroom < 0) pctHeadroom = 0;
 
     // Sort non-pinned by scholarship priority ascending (1 = highest).
@@ -116,6 +122,34 @@ export function computeMerge(
         });
         continue;
       }
+      if (e.m.scholarship.mayExceedCeiling) {
+        /*
+         * Donor agreement: this scholarship may take a fee head past 100%.
+         *
+         * Treated exactly as a fixed amount is — it neither draws from the
+         * headroom nor is limited by it — because that is what the exemption
+         * means. The alternative reading, "trim it last but still trim it",
+         * makes the flag do nothing whenever a higher-precedence award has
+         * already claimed the ceiling, which is the only situation it exists
+         * for: the seeder grants this award only to students who already hold
+         * the internal one.
+         *
+         * Not applied to `Fixed amount`, which is already unconditional, nor
+         * to pinned lines, which are handled where the headroom is computed.
+         */
+        e.m.components.push({
+          feeHead: head,
+          entitlementPct: e.entPct,
+          entitlementPKR: 0,
+          appliedPct: e.entPct,
+          appliedPKR: 0,
+          mergeStatus: "Full",
+          isOverridden: false,
+          kind: e.kind,
+        });
+        continue;
+      }
+
       const granted = Math.min(e.entPct, pctHeadroom);
       pctHeadroom -= granted;
       let status: MergedComponent["mergeStatus"] = "Full";
@@ -145,17 +179,26 @@ export function ceilingBreach(
 ): { breachedHeads: { head: FeeHead; total: number }[] } {
   const breached: { head: FeeHead; total: number }[] = [];
   // Simulate raw entitlement totals per fee head across existing active awards + candidate.
+  //
+  // Awards from a scholarship allowed to exceed the ceiling are left out of the
+  // sum on both sides. Counting them would warn about a breach that is the
+  // agreed arrangement rather than a conflict, and computeMerge does not trim
+  // them, so the warning would describe something that never happens.
+  const exempt = new Set(scholarships.filter((s) => s.mayExceedCeiling).map((s) => s.id));
   const totals = new Map<FeeHead, number>();
   const bump = (h: FeeHead, pct: number) => totals.set(h, (totals.get(h) ?? 0) + pct);
   for (const a of existingAwards) {
+    if (exempt.has(a.scholarshipId)) continue;
     for (const c of a.components) {
       if (c.entitlementKind === "Percentage") bump(c.feeHead, c.entitlementValue);
       else if (c.entitlementKind === "Full waiver") bump(c.feeHead, 100);
     }
   }
-  for (const line of candidate.scholarship.coverage) {
-    if (line.benefitKind === "Percentage") bump(line.feeHead, line.value);
-    else if (line.benefitKind === "Full waiver") bump(line.feeHead, 100);
+  if (!candidate.scholarship.mayExceedCeiling) {
+    for (const line of candidate.scholarship.coverage) {
+      if (line.benefitKind === "Percentage") bump(line.feeHead, line.value);
+      else if (line.benefitKind === "Full waiver") bump(line.feeHead, 100);
+    }
   }
   for (const [head, total] of totals) {
     if (total > 100) breached.push({ head, total });

@@ -2,6 +2,7 @@ import { createFileRoute, Link, useParams, useNavigate } from "@tanstack/react-r
 import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/scholarship/AppShell";
 import { useStore } from "@/lib/scholarship/store";
+import { can } from "@/lib/scholarship/roles";
 import { ceilingBreach, computeMerge, feeOf } from "@/lib/scholarship/merge";
 import type { Award, MergedAward, Scholarship } from "@/lib/scholarship/types";
 import { Button } from "@/components/ui/button";
@@ -112,7 +113,10 @@ function statusOf(components: MergedAward["components"]) {
 function StudentDetail() {
   const { regNo } = useParams({ from: "/students/$regNo" });
   const nav = useNavigate();
-  const { students, awards, scholarships, addAward, revokeAward } = useStore();
+  const { students, awards, scholarships, addAward, revokeAward, role } = useStore();
+  // Moving money is awards.manage. Data Entry may edit a student and may not
+  // give them a scholarship, and the API enforces exactly that.
+  const mayAward = can(role, "awards.manage");
   const student = students.find((s) => s.regNo === regNo);
   const screened = useScreenedApplications();
   const theirApplications = useMemo(
@@ -229,9 +233,11 @@ function StudentDetail() {
                 </div>
               </PopoverContent>
             </Popover>
-            <Button className="h-11 rounded-xl px-5" onClick={() => setAddOpen(true)}>
-              <Plus className="h-4 w-4" /> Give a scholarship
-            </Button>
+            {mayAward && (
+              <Button className="h-11 rounded-xl px-5" onClick={() => setAddOpen(true)}>
+                <Plus className="h-4 w-4" /> Give a scholarship
+              </Button>
+            )}
           </div>
         }
       />
@@ -541,7 +547,11 @@ function StudentDetail() {
                   <StepHeading
                     n={2}
                     title="Scholarships this student holds"
-                    body="One card per scholarship. The tag in the corner tells you whether it pays its full amount, was cut back, or currently pays nothing. Use “Take it back” on a card to end that one scholarship."
+                    body={
+                      mayAward
+                        ? "One card per scholarship. The tag in the corner tells you whether it pays its full amount, was cut back, or currently pays nothing. Use “Take it back” on a card to end that one scholarship."
+                        : "One card per scholarship. The tag in the corner tells you whether it pays its full amount, was cut back, or currently pays nothing."
+                    }
                     className="mb-4"
                   />
                   {merged.length === 0 ? (
@@ -549,11 +559,17 @@ function StudentDetail() {
                       <EmptyState
                         icon={GraduationCap}
                         title="No scholarship yet"
-                        message="This student is not receiving any fee reduction. You can give them one now."
+                        message={
+                          mayAward
+                            ? "This student is not receiving any fee reduction. You can give them one now."
+                            : "This student is not receiving any fee reduction."
+                        }
                         action={
-                          <Button className="h-11 rounded-xl" onClick={() => setAddOpen(true)}>
-                            <Plus className="h-4 w-4" /> Give a scholarship
-                          </Button>
+                          mayAward ? (
+                            <Button className="h-11 rounded-xl" onClick={() => setAddOpen(true)}>
+                              <Plus className="h-4 w-4" /> Give a scholarship
+                            </Button>
+                          ) : undefined
                         }
                       />
                     </div>
@@ -565,7 +581,7 @@ function StudentDetail() {
                           merged={m}
                           student={student}
                           restored={restoredIds.has(m.award.id)}
-                          onRevoke={() => setRevokeFor(m.award)}
+                          onRevoke={mayAward ? () => setRevokeFor(m.award) : undefined}
                           precedence={precedenceOf(scholarships, m.scholarship.id)}
                         />
                       ))}
@@ -717,7 +733,8 @@ function AwardCard({
   merged: MergedAward;
   student: { tuitionFee: number; hostelFee: number; messFee: number; otherFee: number };
   restored: boolean;
-  onRevoke: () => void;
+  /** Absent for a role that may not move money, which hides "Take it back". */
+  onRevoke?: () => void;
   precedence: number;
 }) {
   const { award, scholarship, components } = merged;
@@ -833,15 +850,17 @@ function AwardCard({
         })}
       </div>
 
-      <div className="mt-4 flex justify-end border-t border-border pt-4">
-        <Button
-          variant="ghost"
-          className="h-9 rounded-lg text-destructive hover:bg-destructive/5 hover:text-destructive"
-          onClick={onRevoke}
-        >
-          <XCircle className="h-4 w-4" /> Take it back
-        </Button>
-      </div>
+      {onRevoke && (
+        <div className="mt-4 flex justify-end border-t border-border pt-4">
+          <Button
+            variant="ghost"
+            className="h-9 rounded-lg text-destructive hover:bg-destructive/5 hover:text-destructive"
+            onClick={onRevoke}
+          >
+            <XCircle className="h-4 w-4" /> Take it back
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

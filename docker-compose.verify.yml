@@ -1,0 +1,56 @@
+# Verification overlay — a real Oracle server to run the schema against.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.verify.yml up -d db
+#
+# docker-compose.yml stays pinned to enterprise 19.3.0.0 because that is what
+# BNU IT runs, and it is not changed by this file. That image cannot be pulled
+# here: it needs a login to container-registry.oracle.com, and the account has
+# MFA on it, which `docker login` has no way to present. So until BNU gives us
+# a schema on their instance, nothing can execute against 19c itself.
+#
+# XE 18c is the stand-in, and the substitution only works in one direction:
+# 18c is *older* than 19c, so DDL that 18c accepts, 19c accepts too. The
+# reverse does not hold — which is exactly why this is an overlay rather than
+# a change to the pin. `server_version => '19c'` in api/config/database.php
+# independently keeps the grammar emitting 19c syntax whatever the server is,
+# so this cannot silently relax CLOB-for-json or NUMBER(1)-for-boolean.
+#
+# Proves: the DDL is valid Oracle, oci8 connects, the custom grammar emits
+# what a server accepts, seeds and the test suite run.
+# Does not prove: that BNU's 19c agrees. Their character set, whether Oracle
+# Text is installed, COMPATIBLE, and what privileges we get are all still
+# unconfirmed, and each can fail on their box after passing here.
+services:
+  db:
+    # Pulls anonymously, which is the entire reason for it — 0.8 GB compressed
+    # against several GB and a login for anything Oracle publishes themselves.
+    image: gvenzl/oracle-xe:18-slim
+    environment:
+      # This image's name for what the base file calls ORACLE_PWD. That one
+      # merges in from docker-compose.yml and is simply ignored here, as is
+      # ORACLE_CHARACTERSET: this database is built into the image at build
+      # time and is already AL32UTF8, so there is nothing left to set.
+      ORACLE_PASSWORD: bnu
+    # Still needed — the SGA lives in /dev/shm and Docker's 64 MB default is
+    # ORA-00845. XE is a much smaller instance than enterprise, so 1 GB does.
+    shm_size: 1gb
+    # !override replaces the base file's list instead of merging into it, to
+    # drop `db-data`. This database is disposable and is meant to be: it is
+    # baked into the image, so letting it relocate into a named volume would
+    # cost a duplicate copy of disk this machine does not have spare. Reset it
+    # with `docker compose ... rm -sf db` and bring it up again.
+    volumes: !override
+      # gvenzl reads init scripts from this directory rather than Oracle's
+      # /opt/oracle/scripts/setup. It runs them the same way, though — sysdba
+      # against CDB$ROOT — so db-init-xe.sql keeps the container switch and
+      # differs from docker/db-init.sql only in naming XEPDB1.
+      - ./docker/db-init-xe.sql:/container-entrypoint-initdb.d/10-app-user.sql:ro
+    healthcheck:
+      # The image ships this on PATH rather than at an absolute path.
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      # A startup, not a database creation — the base file's 20m allows for
+      # enterprise building one from scratch, which this image never does.
+      start_period: 5m

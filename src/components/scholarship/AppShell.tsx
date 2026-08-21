@@ -14,14 +14,16 @@ import {
   ClipboardCheck,
   ShieldCheck,
   Check,
+  LogOut,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
 import { GlossarySheet } from "./glossary";
 import { useStore } from "@/lib/scholarship/store";
+import { useSession } from "@/lib/auth/session";
 import { useScreenedApplications } from "@/lib/scholarship/useApplications";
-import { ROLE_BLURB, ROLE_INITIALS } from "@/lib/scholarship/roles";
-import { ROLES, type Role } from "@/lib/scholarship/types";
+import { ROLE_BLURB, ROLE_INITIALS, can } from "@/lib/scholarship/roles";
+import type { Capability } from "@/lib/scholarship/roles";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +44,16 @@ type NavItem = {
   exact?: boolean;
   /** Name of a live count to show as a badge, when there is one to show. */
   badge?: "pendingApplications";
+  /**
+   * What the role must hold for this destination to be worth offering.
+   *
+   * Absent means every signed-in role may go there — the read-only screens.
+   * Where it is present it names the same capability the route's write
+   * endpoint is gated on, so the menu and the API agree about who may do what.
+   * Before this, every role saw every entry: a Reporting user could reach
+   * "Add a scholarship", fill in five steps, and be told 403 on save.
+   */
+  needs?: Capability;
 };
 
 const NAV: { heading: string; items: NavItem[] }[] = [
@@ -80,18 +92,21 @@ const NAV: { heading: string; items: NavItem[] }[] = [
         label: "Add a scholarship",
         hint: "Set up a new one",
         icon: PlusCircle,
+        needs: "scholarships.edit",
       },
       {
         to: "/scholarships/apply",
         label: "Give to students",
         hint: "Award one to a group or a person",
         icon: UserPlus,
+        needs: "awards.manage",
       },
       {
         to: "/students/edit",
         label: "Edit a student's scholarship",
         hint: "Change one student's amounts by hand",
         icon: PencilLine,
+        needs: "awards.manage",
       },
       {
         to: "/scholarships/archived",
@@ -109,12 +124,14 @@ const NAV: { heading: string; items: NavItem[] }[] = [
         label: "Priority order",
         hint: "Which one is paid first",
         icon: ListOrdered,
+        needs: "scholarships.edit",
       },
       {
         to: "/settings/criteria",
         label: "Eligibility criteria",
         hint: "What turns an application down",
         icon: ShieldCheck,
+        needs: "criteria.edit",
       },
     ],
   },
@@ -142,6 +159,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const [glossaryOpen, setGlossaryOpen] = useState(false);
   const screened = useScreenedApplications();
+  const { role } = useStore();
+
+  /*
+   * The menu this role can actually use.
+   *
+   * A group with nothing left in it is dropped rather than rendered as a
+   * heading over empty space — Reporting loses every Setup entry, and an
+   * empty "Setup" heading reads as a broken screen rather than as a
+   * permission boundary.
+   */
+  const nav = NAV.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => item.needs === undefined || can(role, item.needs)),
+  })).filter((group) => group.items.length > 0);
 
   /* The badge counts only what actually needs a person: applications that are
      still open and were not caught by the criteria filter. Badging the whole
@@ -176,7 +207,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </Link>
 
         <nav className="no-scrollbar flex-1 overflow-y-auto px-3 pb-3">
-          {NAV.map((group) => (
+          {nav.map((group) => (
             <div key={group.heading} className="mb-5 last:mb-0">
               <div className="px-3 pb-2 text-[11px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
                 {group.heading}
@@ -245,77 +276,77 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 /**
- * Who you are working as.
+ * Who you are signed in as, and the way out.
  *
- * Standing in for a login until there is one. It is a visible control rather
- * than a hidden setting because the whole point is that the person using the
- * system can see, at a glance, which hat they have on — the audit log is about
- * to be signed with it.
+ * This was a role picker — a visible control, because the audit log was about
+ * to be signed with whatever it said. It is now a statement rather than a
+ * choice: the role comes from the session, the server enforces it, and the only
+ * way to work as somebody else is to be somebody else.
+ *
+ * It stays just as visible for the same reason it always was. The person using
+ * this should be able to see at a glance whose name is going on the record.
  */
 function RoleSwitcher() {
-  const { role, setRole } = useStore();
+  const { role } = useStore();
+  const { user, signOut } = useSession();
   const [open, setOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={`Working as ${role}. Change role.`}
+          aria-label={`Signed in as ${user?.name ?? role}, ${role}. Open account menu.`}
           className="flex items-center gap-2.5 rounded-xl border-l border-border py-1.5 pr-2 pl-3 transition-colors hover:bg-secondary"
         >
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--primary-tint)] text-xs font-bold text-[var(--info-ink)]">
             {ROLE_INITIALS[role]}
           </span>
           <span className="hidden leading-tight sm:block">
-            <span className="block text-left text-[13px] font-semibold">{role}</span>
-            <span className="block text-left text-xs text-muted-foreground">Change role</span>
+            <span className="block text-left text-[13px] font-semibold">{user?.name ?? role}</span>
+            <span className="block text-left text-xs text-muted-foreground">{role}</span>
           </span>
           <ChevronRight className="h-4 w-4 rotate-90 text-muted-foreground" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 rounded-xl p-2">
-        <p className="px-2 pt-1 pb-2 text-[13px] text-muted-foreground">
-          There is no sign-in yet. Pick the role you are working as — it decides what you can change
-          and whose name goes on the record.
-        </p>
-        <div className="space-y-0.5">
-          {ROLES.map((r: Role) => {
-            const on = r === role;
-            return (
-              <button
-                key={r}
-                type="button"
-                onClick={() => {
-                  setRole(r);
-                  setOpen(false);
-                }}
-                className={cn(
-                  "flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors",
-                  on ? "bg-[var(--primary-tint)]" : "hover:bg-secondary",
-                )}
-              >
-                <span
-                  className={cn(
-                    "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold",
-                    on
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-muted-foreground",
-                  )}
-                >
-                  {ROLE_INITIALS[r]}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[13px] font-semibold">{r}</span>
-                  <span className="block text-xs leading-snug text-muted-foreground">
-                    {ROLE_BLURB[r]}
-                  </span>
-                </span>
-                {on ? <Check className="mt-1 h-4 w-4 shrink-0 text-primary" /> : null}
-              </button>
-            );
-          })}
+        <div className="flex items-start gap-3 px-3 py-2.5">
+          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
+            {ROLE_INITIALS[role]}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13px] font-semibold">{role}</span>
+            <span className="block text-xs leading-snug text-muted-foreground">
+              {ROLE_BLURB[role]}
+            </span>
+            {user ? (
+              <span className="mt-1 block truncate text-xs text-muted-foreground">
+                {user.email}
+              </span>
+            ) : null}
+          </span>
+          <Check className="mt-1 h-4 w-4 shrink-0 text-primary" />
         </div>
+
+        <p className="px-3 pt-1 pb-2 text-[13px] leading-snug text-muted-foreground">
+          Your role decides what you can change and whose name goes on the record. Ask the Registrar
+          Office if it is wrong.
+        </p>
+
+        <button
+          type="button"
+          disabled={signingOut}
+          onClick={async () => {
+            setSigningOut(true);
+            await signOut();
+            setOpen(false);
+          }}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium transition-colors hover:bg-secondary disabled:opacity-60"
+        >
+          <LogOut className="h-4 w-4 shrink-0 text-muted-foreground" />
+          {signingOut ? "Signing out…" : "Sign out"}
+        </button>
       </PopoverContent>
     </Popover>
   );

@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useParams, useNavigate } from "@tanstack/react-router";
+import { RequiresCapability } from "@/components/scholarship/RequiresCapability";
 import { useCallback, useMemo, useState } from "react";
 import { useStore } from "@/lib/scholarship/store";
 import { evaluate, type EvalResult, type EvalStatus } from "@/lib/scholarship/evaluate";
@@ -48,7 +49,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { SCHOOLS, BATCHES, PROGRAMMES } from "@/lib/scholarship/seed";
+import { useReference } from "@/lib/scholarship/reference";
 import { shortSchool } from "@/components/scholarship/helpers";
 import { StepBrief } from "@/components/scholarship/guidance";
 import {
@@ -76,7 +77,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/assign/$scholarshipId")({
-  component: AssignFlow,
+  component: GuardedAssignFlow,
   validateSearch: (s: Record<string, unknown>) => ({
     student: s.student as string | undefined,
   }),
@@ -101,6 +102,9 @@ function AssignFlow() {
   const search = Route.useSearch();
   const nav = useNavigate();
   const { scholarships, students, awards, feeHeads, assignBatch, undoBatch } = useStore();
+  // Destructured under the old constant names so the uses below read as they
+  // did when these were hardcoded arrays in seed.ts. They are tables now.
+  const { schools: SCHOOLS, batches: BATCHES, programmes: PROGRAMMES } = useReference();
   const scholarship = scholarships.find((s) => s.id === scholarshipId);
 
   const [step, setStep] = useState<Step>(1);
@@ -253,10 +257,38 @@ function AssignFlow() {
         <EmptyState
           icon={AlertTriangle}
           title="We could not find that scholarship"
-          message="It may have been deleted while this page was open."
+          // Nothing here is ever deleted, so the honest reasons are a mistyped
+          // address or a link from before this scholarship existed.
+          message="Check the address. Nothing is ever deleted here, so a scholarship that once existed still will."
           action={
             <Button className="h-11 rounded-xl" asChild>
               <Link to="/scholarships">Back to all scholarships</Link>
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+
+  /*
+   * A retired scholarship is not given out, and the server refuses to.
+   *
+   * Said here rather than at the end. The flow is four steps — choose a
+   * cohort, review who qualifies, set the rates, confirm — and without this
+   * you could walk all four and have the refusal arrive on the last press,
+   * with the work discarded. The screen used to offer it because the store
+   * holds every scholarship, active or not, which the archive list depends on.
+   */
+  if (scholarship.status === "Archived") {
+    return (
+      <div className="mx-auto max-w-md p-10">
+        <EmptyState
+          icon={AlertTriangle}
+          title="This scholarship is retired"
+          message={`${scholarship.name} is no longer given out. Bring it back from the retired list first if it should be.`}
+          action={
+            <Button className="h-11 rounded-xl" asChild>
+              <Link to="/scholarships/archived">Retired scholarships</Link>
             </Button>
           }
         />
@@ -269,7 +301,10 @@ function AssignFlow() {
   const canCommit =
     selected.size > paysNothing.size && (how === "evaluate" || directReason.trim().length > 0);
 
-  const commit = () => {
+  // async because committing is now a request. The button already guards
+  // against a second click through `canCommit`, and the toast below only
+  // appears once the server has actually written the batch.
+  const commit = async () => {
     const chosen = evaluated.filter((r) => selected.has(r.student.regNo));
     let final = chosen;
     if (quota != null && chosen.length > quota) {
@@ -315,7 +350,7 @@ function AssignFlow() {
       picks.map((p) => p.student.regNo),
     );
     const reason = note ? `${base} · ${note}` : base;
-    const batchId = assignBatch(
+    const batchId = await assignBatch(
       scholarshipId,
       picks,
       how === "direct" ? "Direct" : "Evaluate",
@@ -1674,5 +1709,20 @@ function SuccessStep({
         </Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * The permission boundary for this screen, applied before it renders.
+ *
+ * The sidebar hides this destination from roles that cannot use it, but a
+ * URL is reachable regardless of what the menu shows. See
+ * RequiresCapability for why the message arrives here rather than at save.
+ */
+function GuardedAssignFlow() {
+  return (
+    <RequiresCapability needs="awards.manage" what="give a scholarship to students">
+      <AssignFlow />
+    </RequiresCapability>
   );
 }

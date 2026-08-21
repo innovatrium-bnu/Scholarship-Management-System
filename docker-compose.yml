@@ -1,0 +1,104 @@
+# Development environment for the BNU Scholarship Management System.
+#
+# Three services, matching how the university server runs it: nginx in front,
+# php-fpm behind it, Oracle behind that. The React SPA is not a service — it
+# is either `npm run dev` on the host (port 8080, proxying /api here) or a
+# static build in dist/ that nginx serves directly.
+#
+#   docker compose up -d
+#   docker compose exec api composer install
+#   docker compose exec api php artisan migrate --seed
+#
+# The database image is not anonymously pullable. Oracle publishes 19c only as
+# a licensed edition, so it needs a one-off (free) Oracle account:
+#
+#   1. accept the licence on the database/enterprise repository page at
+#      container-registry.oracle.com
+#   2. docker login container-registry.oracle.com
+#
+# The first `up` then pulls several GB and spends 10-20 minutes creating the
+# database before the healthcheck passes. That is normal, not a hang.
+#
+services:
+  db:
+    # 19c specifically, because that is what BNU IT runs. The freely pullable
+    # Oracle images (database/free, database/express) are 23ai and 21c, and both
+    # accept schema syntax 19c rejects — native JSON and native BOOLEAN column
+    # types. Developing against either would let those through here and fail on
+    # their server, which is the whole class of mistake this pin prevents.
+    image: container-registry.oracle.com/database/enterprise:19.3.0.0
+    environment:
+      # Sets the SYS, SYSTEM and PDBADMIN passwords. Development only.
+      ORACLE_PWD: bnu
+      # Already the image default, stated because it is a hard requirement
+      # rather than a preference: student names include Urdu and Punjabi
+      # transliterations, which a non-Unicode character set replaces silently.
+      ORACLE_CHARACTERSET: AL32UTF8
+    # Oracle maps the SGA into /dev/shm, and the image also writes its
+    # "database started" marker there. Docker's 64 MB default is not enough and
+    # surfaces as ORA-00845 at startup.
+    shm_size: 2gb
+    ports:
+      # Exposed so a GUI client on the host can inspect the data. Nothing in the
+      # application reaches Oracle this way; the API uses the compose network.
+      - "1521:1521"
+    volumes:
+      - db-data:/opt/oracle/oradata
+      # Creates the application user in the PDB. Only runs on a fresh volume.
+      - ./docker/db-init.sql:/opt/oracle/scripts/setup/10-app-user.sql:ro
+    healthcheck:
+      # Shipped by the image; exits 0 only once the PDB is open READ WRITE. The
+      # API's `depends_on` waits for this, so a cold `compose up` cannot run
+      # migrations against a database that has not finished initialising.
+      test: ["CMD", "/opt/oracle/checkDBStatus.sh"]
+      interval: 15s
+      timeout: 30s
+      retries: 40
+      # First boot creates the database from scratch. start_period keeps those
+      # attempts from being counted as failures.
+      start_period: 20m
+
+  api:
+    build: ./api
+    depends_on:
+      db:
+        condition: service_healthy
+    # No DB_* here on purpose. api/.env is the single place development
+    # settings live. Setting them here too would make them real process
+    # environment variables, which outrank both .env and phpunit.xml — and a
+    # test run would then quietly point at the development database and
+    # RefreshDatabase would wipe it.
+    volumes:
+      - ./api:/var/www/api
+      # These three override the bind mount so they stay on the container's own
+      # filesystem. vendor/ because Composer's atomic renames fail on a Windows
+      # bind mount. storage/ and bootstrap/cache because php-fpm runs as
+      # www-data and must be able to write to them: a bind mount arrives with
+      # the host's ownership, so Laravel cannot even open its own log file.
+      # None of the three is source code.
+      - api-vendor:/var/www/api/vendor
+      - api-storage:/var/www/api/storage
+      - api-cache:/var/www/api/bootstrap/cache
+      # The TypeScript domain modules are the specification for the PHP port,
+      # and a few tests read them directly rather than keeping a second copy of
+      # values that would drift. Read-only: nothing in PHP may write here.
+      - ./src:/var/www/src:ro
+
+  web:
+    image: nginx:1.27-alpine
+    depends_on:
+      - api
+    ports:
+      - "8000:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # public/ is needed for its index.php front controller; dist/ is the built
+      # SPA and is simply absent until `npm run build` has been run.
+      - ./api/public:/var/www/api/public:ro
+      - ./dist:/var/www/dist:ro
+
+volumes:
+  db-data:
+  api-vendor:
+  api-storage:
+  api-cache:

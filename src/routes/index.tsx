@@ -20,7 +20,7 @@ import { PageHeader } from "@/components/scholarship/AppShell";
 import { useStore } from "@/lib/scholarship/store";
 import { computeMerge, waiverValuePKR } from "@/lib/scholarship/merge";
 import { pkr, shortSchool } from "@/components/scholarship/helpers";
-import { SCHOOLS, BATCHES, SEMESTERS, GEOGRAPHY } from "@/lib/scholarship/seed";
+import { useReference } from "@/lib/scholarship/reference";
 import {
   awardsRevokedBetween,
   grantedAndRevokedBySemester,
@@ -76,6 +76,14 @@ const EMPTY: Filters = { ...ALL_OFF, status: "Active" };
 
 function Dashboard() {
   const { students, awards, scholarships, events } = useStore();
+  // Destructured under the old constant names so the uses below read as they
+  // did when these were hardcoded arrays in seed.ts. They are tables now.
+  const {
+    schools: SCHOOLS,
+    batches: BATCHES,
+    semesters: SEMESTERS,
+    geography: GEOGRAPHY,
+  } = useReference();
   const [f, setF] = useState<Filters>(EMPTY);
   const [panelOpen, setPanelOpen] = useState(false);
   const navigate = useNavigate();
@@ -145,7 +153,7 @@ function Dashboard() {
       full: sc,
       count: map.get(sc)?.size ?? 0,
     })).sort((a, b) => b.count - a.count);
-  }, [scholars, students]);
+  }, [scholars, students, SCHOOLS]);
 
   const byType = useMemo(() => {
     const map = new Map<string, number>();
@@ -172,7 +180,7 @@ function Dashboard() {
         "2025",
         "2026",
       ]),
-    [scholars, students],
+    [scholars, students, BATCHES],
   );
 
   const waiverByHead = useMemo(() => {
@@ -210,12 +218,15 @@ function Dashboard() {
         total: (heads.Tuition ?? 0) + (heads.Hostel ?? 0) + (heads.Other ?? 0),
       };
     }).sort((a, b) => b.total - a.total);
-  }, [uniqueScholarRegs, students, awards, scholarships]);
+  }, [uniqueScholarRegs, students, awards, scholarships, SCHOOLS]);
 
   /* Counted from the event log. This used to read two hardcoded arrays that
      reconciled with nothing on file, rendered as though they had been
      measured. */
-  const gainedLost = useMemo(() => grantedAndRevokedBySemester(events, SEMESTERS), [events]);
+  const gainedLost = useMemo(
+    () => grantedAndRevokedBySemester(events, SEMESTERS),
+    [events, SEMESTERS],
+  );
 
   const bandDist = useMemo(() => {
     const bands = new Map<string, number>([

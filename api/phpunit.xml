@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>app</directory>
+        </include>
+    </source>
+    <php>
+        <env name="APP_ENV" value="testing"/>
+        <env name="APP_MAINTENANCE_DRIVER" value="file"/>
+        <env name="BCRYPT_ROUNDS" value="4"/>
+        <env name="BROADCAST_CONNECTION" value="null"/>
+        <env name="CACHE_STORE" value="array"/>
+        <!--
+            Oracle, not SQLite in memory.
+
+            The schema is not portable and is not meant to be: JSON is held in
+            CLOBs guarded by IS JSON check constraints, booleans are NUMBER(1),
+            and precedence reordering depends on a DEFERRABLE INITIALLY
+            DEFERRED unique constraint. A SQLite test run would pass while
+            proving nothing about the database this actually ships on.
+
+            DB_USERNAME is what separates the test data from the development
+            data — not DB_DATABASE, which is deliberately the same PDB as
+            api/.env names. In Oracle a user is a schema, so bnu_test owns its
+            own copy of all 31 tables and an unqualified `students` resolves to
+            a different table depending only on who connected. Changing
+            DB_DATABASE here in the belief that it isolates anything would
+            leave the suite running RefreshDatabase against bnu's tables.
+
+            The safety net is Oracle's own: migrate:fresh wipes by iterating
+            USER_TABLES, which lists only the connected user's tables, and
+            bnu_test holds no privilege over any other schema.
+
+            DB_DATABASE names the PDB of whichever server is up, and it has to
+            be edited here rather than passed in: force="true" means a shell
+            variable cannot override it, which is the same property that keeps
+            a stray DB_USERNAME from pointing the suite at development data.
+            XEPDB1 is docker-compose.verify.yml's XE 18c; ORCLPDB1 is the
+            enterprise 19.3 image in docker-compose.yml, and BNU's instance
+            will name its own again.
+        -->
+        <env name="DB_CONNECTION" value="oracle" force="true"/>
+        <env name="DB_HOST" value="db" force="true"/>
+        <env name="DB_PORT" value="1521" force="true"/>
+        <env name="DB_DATABASE" value="XEPDB1" force="true"/>
+        <env name="DB_USERNAME" value="bnu_test" force="true"/>
+        <env name="DB_PASSWORD" value="bnu" force="true"/>
+        <env name="DB_URL" value=""/>
+        <env name="MAIL_MAILER" value="array"/>
+        <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="SESSION_DRIVER" value="array"/>
+        <env name="PULSE_ENABLED" value="false"/>
+        <env name="TELESCOPE_ENABLED" value="false"/>
+        <env name="NIGHTWATCH_ENABLED" value="false"/>
+    </php>
+</phpunit>

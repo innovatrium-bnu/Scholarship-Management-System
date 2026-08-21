@@ -1,29 +1,49 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
+import { useQueries, useQueryClient, type QueryClient } from "@tanstack/react-query";
+
+import { api, type Envelope } from "@/lib/api/client";
+import { useSession } from "@/lib/auth/session";
+
 import type {
   Award,
   AuditEntry,
   AssignmentBatch,
   EligibilityCriteria,
   NeedApplication,
-  Revocation,
   Role,
   Scholarship,
   Student,
 } from "./types";
-import type { RevocationCause } from "./types";
 import type { DomainEvent } from "./events";
-import {
-  dateOfSemester,
-  seedApplications,
-  seedAudit,
-  seedAwards,
-  seedBatches,
-  seedCriteria,
-  seedEvents,
-  seedScholarships,
-  seedStudents,
-  semesterOf,
-} from "./seed";
+
+/**
+ * The application's data, from Laravel.
+ *
+ * This used to be an in-memory React context seeded from seed.ts and rebuilt on
+ * every page refresh. The shape it exposes has not changed — the same arrays
+ * under the same names, the same mutation functions — because twenty screens
+ * read it and none of them should have to care where the rows come from. What
+ * changed is underneath: every array is a query and every mutation is a
+ * request.
+ *
+ * Three decisions worth knowing before changing anything here.
+ *
+ * **No optimistic updates.** A mutation waits for the server and then
+ * invalidates. Optimism is the right default for a chat message and the wrong
+ * one for money: the merge decides what an award actually pays by resolving it
+ * against every other award the student holds, so a client that guessed would
+ * show a figure the server never agreed to, and would show it most convincingly
+ * in exactly the cases where precedence made it wrong.
+ *
+ * **The provider waits for the first load.** Screens iterate these arrays
+ * directly and were written when they could never be absent. Rendering them
+ * against an empty array while a query is in flight would flash "no
+ * scholarships" at somebody who has hundreds.
+ *
+ * **The server owns the audit trail.** Every write here records its own audit
+ * entry and its own event, in the same transaction as the change. Nothing on
+ * this side needs to remember to.
+ */
 
 interface StoreState {
   scholarships: Scholarship[];
@@ -43,40 +63,45 @@ interface StoreState {
   /**
    * The earliest moment this data can speak to. Anything asked about a period
    * before it is unanswerable, and must be refused rather than answered "none".
+   *
+   * Now the oldest thing on record rather than the moment the tab opened, which
+   * is the first question this could answer honestly only once the data
+   * outlived the page.
    */
   historyStartedAt: string;
   /**
-   * Who is using the system. Stands in for a session until authentication
-   * exists; it decides what screens allow and whose name the audit log
-   * records.
+   * Who is using the system. The signed-in user's role — it decides what
+   * screens allow and whose name the audit log records.
    */
   role: Role;
 }
 
 interface StoreCtx extends StoreState {
-  setRole: (r: Role) => void;
-  addScholarship: (s: Scholarship, reason: string) => void;
-  updateScholarship: (id: string, patch: Partial<Scholarship>, reason: string) => void;
-  archiveScholarship: (id: string, endExisting: boolean, semester: string) => void;
-  restoreScholarship: (id: string, reason: string) => void;
-  addAward: (a: Award) => void;
+  addScholarship: (s: Scholarship, reason: string) => Promise<void>;
+  updateScholarship: (id: string, patch: Partial<Scholarship>, reason: string) => Promise<void>;
+  archiveScholarship: (id: string, endExisting: boolean, semester: string) => Promise<void>;
+  restoreScholarship: (id: string, reason: string) => Promise<void>;
+  addAward: (a: Award) => Promise<void>;
   /** Change one student's amounts by hand, without touching the scholarship. */
-  editAwardByHand: (awardId: string, components: Award["components"], reason: string) => void;
+  editAwardByHand: (
+    awardId: string,
+    components: Award["components"],
+    reason: string,
+  ) => Promise<void>;
   revokeAward: (
     id: string,
     reason: string,
     effective: string,
     timing: "immediate" | "next",
-  ) => void;
+  ) => Promise<void>;
   updateAwardComponent: (
     awardId: string,
     feeHead: string,
     patch: { isOverridden?: boolean; overrideReason?: string; overrideAuthority?: string },
-  ) => void;
-  pushAudit: (e: Omit<AuditEntry, "id" | "timestamp">) => void;
-  reorderScholarships: (orderedIds: string[]) => void;
-  addFeeHead: (name: string) => void;
-  deleteFeeHead: (name: string) => boolean;
+  ) => Promise<void>;
+  reorderScholarships: (orderedIds: string[]) => Promise<void>;
+  addFeeHead: (name: string) => Promise<void>;
+  deleteFeeHead: (name: string) => Promise<boolean>;
   assignBatch: (
     scholarshipId: string,
     picks: {
@@ -88,10 +113,10 @@ interface StoreCtx extends StoreState {
     }[],
     mode: "Evaluate" | "Direct",
     reason: string,
-  ) => string;
-  undoBatch: (batchId: string) => void;
+  ) => Promise<string>;
+  undoBatch: (batchId: string) => Promise<void>;
   /** Edit a student's own record. Admissions data, so every change is logged. */
-  updateStudent: (regNo: string, patch: Partial<Student>, reason: string) => void;
+  updateStudent: (regNo: string, patch: Partial<Student>, reason: string) => Promise<void>;
   /**
    * Take in one application.
    *
@@ -101,7 +126,7 @@ interface StoreCtx extends StoreState {
    * it is kept so the intake has one audited entry point rather than being
    * invented twice.
    */
-  submitApplication: (a: NeedApplication) => void;
+  submitApplication: (a: NeedApplication) => Promise<void>;
   /**
    * Record a decision on one application. Approving also creates the award, so
    * the two can never disagree about whether a student was given the money.
@@ -111,905 +136,449 @@ interface StoreCtx extends StoreState {
     outcome: "Approved" | "Rejected" | "On hold",
     reason: string,
     opts?: { awardedPct?: number; automatic?: boolean },
-  ) => void;
+  ) => Promise<void>;
   /** Turn down every listed application at once, each with its own reason. */
-  rejectApplications: (entries: { id: string; reason: string }[], summary: string) => void;
+  rejectApplications: (entries: { id: string; reason: string }[], summary: string) => Promise<void>;
   /** Put a decided application back in the queue. */
-  reopenApplication: (id: string, reason: string) => void;
+  reopenApplication: (id: string, reason: string) => Promise<void>;
   updateCriteria: (
     scholarshipId: string,
     patch: Partial<EligibilityCriteria>,
     reason: string,
-  ) => void;
+  ) => Promise<void>;
 }
 
 const Ctx = createContext<StoreCtx | null>(null);
 
-function makeInitial(): StoreState {
-  const scholarships = seedScholarships();
-  const students = seedStudents();
-  const awards = seedAwards(students);
-  const events = seedEvents(awards);
-  return {
-    scholarships,
-    students,
-    awards,
-    audit: seedAudit(),
-    feeHeads: ["Tuition", "Hostel", "Mess", "Other"],
-    batches: seedBatches(),
-    applications: seedApplications(students, awards),
-    criteria: seedCriteria(),
-    events,
-    historyStartedAt: events.reduce(
-      (earliest, e) => (e.at < earliest ? e.at : earliest),
-      new Date().toISOString(),
+/* -- Queries -------------------------------------------------------------- */
+
+const keys = {
+  scholarships: ["scholarships"] as const,
+  students: ["students"] as const,
+  awards: ["awards"] as const,
+  audit: ["audit"] as const,
+  events: ["events"] as const,
+  batches: ["batches"] as const,
+  applications: ["applications"] as const,
+  criteria: ["criteria"] as const,
+  reference: ["reference"] as const,
+};
+
+interface Page<T> {
+  data: T[];
+  meta: { currentPage: number; lastPage: number };
+}
+
+/**
+ * Follow a paginated endpoint to the end.
+ *
+ * The screens hold the whole register in memory and filter it there, which is
+ * what they were written to do against seed.ts. The API paginates because a
+ * register is the one list here that grows without bound, so this walks it.
+ *
+ * That is honest rather than ideal: at the 5,000 students AGENTS.md sizes this
+ * for, it is 25 requests on first load. Server-side search and paging per
+ * screen is the fix, and it is a change to every list screen rather than to
+ * this file — which is why it is not being made in the same step as moving off
+ * the in-memory store.
+ *
+ * What this file can do meanwhile is stop paying for those requests one at a
+ * time. The first page reports how many there are, so the rest are known up
+ * front and have no reason to be serialised: the loop used to await each page
+ * before asking for the next, which made the wall clock the sum of every round
+ * trip rather than the slowest one. On the demo register that was ten requests
+ * for students and five for the audit log, in sequence, in front of the first
+ * paint — the single largest part of a cold load.
+ *
+ * The pages are still assembled in order afterwards, because the register is
+ * sorted by registration number and the screens present it that way.
+ * Promise.all resolves in argument order regardless of which request finishes
+ * first, so that ordering costs nothing.
+ */
+async function fetchAllPages<T>(path: string): Promise<T[]> {
+  const first = await api.get<Page<T>>(`${path}?perPage=200`);
+
+  if (first.meta.lastPage <= 1) {
+    return first.data;
+  }
+
+  const rest = await Promise.all(
+    Array.from({ length: first.meta.lastPage - 1 }, (_, i) =>
+      api.get<Page<T>>(`${path}?perPage=200&page=${i + 2}`),
     ),
-    role: "Registrar Office",
-  };
+  );
+
+  return [first, ...rest].flatMap((page) => page.data);
 }
 
-/**
- * Build a revocation record from whatever the caller had to hand.
- *
- * The revoke dialog asks for a term ("Fall 2025"); archiving a scholarship also
- * works in terms; reopening an application has only today's date. Normalising
- * here means every revocation carries both a date and a term, so a report can
- * group by term without each caller having to derive one.
- */
-function makeRevocation(opts: {
-  at: string;
-  /** Either an ISO date or a SEMESTERS label — both are accepted. */
-  effective: string;
-  timing: "immediate" | "next";
-  cause: RevocationCause;
-  reason: string;
-  by: string;
-}): Revocation {
-  const isDate = /^\d{4}-\d{2}-\d{2}/.test(opts.effective);
-  return {
-    at: opts.at,
-    effectiveFrom: isDate ? opts.effective.slice(0, 10) : dateOfSemester(opts.effective),
-    semester: isDate ? semesterOf(opts.effective) : opts.effective,
-    timing: opts.timing,
-    cause: opts.cause,
-    reason: opts.reason,
-    by: opts.by,
-  };
+const unwrap =
+  <T,>(path: string) =>
+  () =>
+    api.get<Envelope<T>>(path).then((r) => r.data);
+
+interface ScreenedApplication {
+  application: NeedApplication;
 }
 
-function revokedEvent(award: Award, r: Revocation, actor: string): DomainEvent {
-  return {
-    kind: "award.revoked",
-    at: r.at,
-    actor,
-    awardId: award.id,
-    studentRegNo: award.studentRegNo,
-    scholarshipId: award.scholarshipId,
-    effectiveFrom: r.effectiveFrom,
-    semester: r.semester,
-    timing: r.timing,
-    cause: r.cause,
-    reason: r.reason,
-  };
-}
-
-function grantedEvent(award: Award, actor: string, at: string): DomainEvent {
-  return {
-    kind: "award.granted",
-    at,
-    actor,
-    awardId: award.id,
-    studentRegNo: award.studentRegNo,
-    scholarshipId: award.scholarshipId,
-    effectiveFrom: award.effectiveFrom,
-    semester: semesterOf(award.effectiveFrom),
-    batchId: award.batchId,
-  };
-}
-
-/**
- * Append audit entries and events together.
- *
- * Every mutation has to write both, and the two had drifted: three of the four
- * paths that revoked an award wrote no award-level record at all. Funnelling
- * them through one function means a new mutation has one obvious place to say
- * what it did, rather than two spread blocks to copy and one to forget.
- */
-function record(
-  s: StoreState,
-  opts: {
-    audit?: Omit<AuditEntry, "id" | "timestamp">[];
-    events?: DomainEvent[];
-    /** Shared timestamp, so entries written together agree on when. */
-    at?: string;
-  },
-): Pick<StoreState, "audit" | "events"> {
-  const now = opts.at ?? new Date().toISOString();
-  const entries: AuditEntry[] = (opts.audit ?? []).map((e, i) => ({
-    ...e,
-    id: `au-${s.audit.length + 1 + i}`,
-    timestamp: now,
-  }));
-  return {
-    // Newest first, matching how AuditPanel reads it.
-    audit: [...entries.reverse(), ...s.audit],
-    // Oldest first — an append-only log reads forwards.
-    events: [...s.events, ...(opts.events ?? [])],
-  };
+interface Reference {
+  feeHeads: string[];
 }
 
 export function ScholarshipProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<StoreState>(() => makeInitial());
+  const queryClient = useQueryClient();
+  const { user } = useSession();
 
-  const pushAudit = useCallback((e: Omit<AuditEntry, "id" | "timestamp">) => {
-    setState((s) => ({
-      ...s,
-      audit: [
-        {
-          ...e,
-          id: `au-${s.audit.length + 1}`,
-          timestamp: new Date().toISOString(),
-        },
-        ...s.audit,
-      ],
-    }));
-  }, []);
+  // Nothing loads until somebody is signed in. Every route is behind
+  // auth:sanctum, so firing these first would be nine guaranteed 401s.
+  const enabled = user !== null;
 
-  const addScholarship = useCallback((sch: Scholarship, reason: string) => {
-    setState((s) => ({
-      ...s,
-      scholarships: [...s.scholarships, sch],
-      audit: [
-        {
-          id: `au-${s.audit.length + 1}`,
-          entityType: "Scholarship",
-          entityId: sch.id,
-          action: "Created",
-          newValue: sch,
-          reason,
-          actor: s.role,
-          timestamp: new Date().toISOString(),
-        },
-        ...s.audit,
-      ],
-    }));
-  }, []);
-
-  /**
-   * A scholarship has one set of terms for life, so an edit simply replaces
-   * them. There are no versions to reconcile: if the terms genuinely need to
-   * differ for a newer intake, that is a separate scholarship scoped to those
-   * batches.
-   */
-  const updateScholarship = useCallback(
-    (id: string, patch: Partial<Scholarship>, reason: string) => {
-      setState((s) => {
-        const old = s.scholarships.find((x) => x.id === id);
-        if (!old) return s;
-        const updated: Scholarship = { ...old, ...patch };
-        return {
-          ...s,
-          scholarships: s.scholarships.map((x) => (x.id === id ? updated : x)),
-          audit: [
-            {
-              id: `au-${s.audit.length + 1}`,
-              entityType: "Scholarship",
-              entityId: id,
-              action: "Changed the rules",
-              oldValue: old,
-              newValue: updated,
-              reason,
-              actor: s.role,
-              timestamp: new Date().toISOString(),
-            },
-            ...s.audit,
-          ],
-        };
-      });
-    },
-    [],
-  );
-
-  const archiveScholarship = useCallback((id: string, endExisting: boolean, semester: string) => {
-    setState((s) => {
-      const scholarships = s.scholarships.map((x) =>
-        x.id === id ? { ...x, status: "Archived" as const } : x,
-      );
-      const name = s.scholarships.find((x) => x.id === id)?.name ?? id;
-      const now = new Date().toISOString();
-
-      /* Retiring a scholarship can end dozens of awards at once. Until this,
-         it did so with a single scholarship-level audit line and nothing on
-         any award, so a student could lose their funding leaving no record
-         against their own name. Each ending now gets its own event. */
-      const ending = endExisting
-        ? s.awards.filter((a) => a.scholarshipId === id && a.status === "Active")
-        : [];
-      const revocationFor = (): Revocation =>
-        makeRevocation({
-          at: now,
-          effective: semester,
-          timing: "next",
-          cause: "Scholarship archived",
-          reason: `${name} was retired, and existing awards were ended from ${semester}.`,
-          by: s.role,
-        });
-
-      const endingIds = new Set(ending.map((a) => a.id));
-      const awards = s.awards.map((a) =>
-        endingIds.has(a.id) ? { ...a, status: "Revoked" as const, revocation: revocationFor() } : a,
-      );
-
-      return {
-        ...s,
-        scholarships,
-        awards,
-        ...record(s, {
-          at: now,
-          audit: [
-            {
-              entityType: "Scholarship",
-              entityId: id,
-              action: endExisting
-                ? `Archived and ended ${ending.length} award${ending.length === 1 ? "" : "s"} from ${semester}`
-                : "Archived (no new awards)",
-              actor: s.role,
-            },
-          ],
-          events: ending.map((a) => revokedEvent(a, revocationFor(), s.role)),
-        }),
-      };
-    });
-  }, []);
-
-  /* Nothing is ever deleted. Archiving is reversible, so a scholarship retired
-     by mistake can be put straight back without losing its history. */
-  const restoreScholarship = useCallback((id: string, reason: string) => {
-    setState((s) => ({
-      ...s,
-      scholarships: s.scholarships.map((x) =>
-        x.id === id ? { ...x, status: "Active" as const } : x,
-      ),
-      audit: [
-        {
-          id: `au-${s.audit.length + 1}`,
-          entityType: "Scholarship",
-          entityId: id,
-          action: "Brought back into use",
-          reason,
-          actor: s.role,
-          timestamp: new Date().toISOString(),
-        },
-        ...s.audit,
-      ],
-    }));
-  }, []);
-
-  /**
-   * Change the amounts on one student's award by hand.
-   *
-   * This is the escape hatch for the cases the rules cannot express: a
-   * committee decision, a correction, a one-off arrangement. It touches only
-   * this student, never the scholarship, and it always records a reason.
-   */
-  const editAwardByHand = useCallback(
-    (awardId: string, components: Award["components"], reason: string) => {
-      setState((s) => {
-        const old = s.awards.find((a) => a.id === awardId);
-        if (!old) return s;
-        const updated: Award = { ...old, components, editedByHand: true, editReason: reason };
-        return {
-          ...s,
-          awards: s.awards.map((a) => (a.id === awardId ? updated : a)),
-          audit: [
-            {
-              id: `au-${s.audit.length + 1}`,
-              entityType: "Award",
-              entityId: awardId,
-              action: "Amounts changed by hand",
-              oldValue: old.components,
-              newValue: components,
-              reason,
-              actor: s.role,
-              timestamp: new Date().toISOString(),
-            },
-            ...s.audit,
-          ],
-        };
-      });
-    },
-    [],
-  );
-
-  const addAward = useCallback((a: Award) => {
-    setState((s) => {
-      const now = new Date().toISOString();
-      return {
-        ...s,
-        awards: [...s.awards, a],
-        ...record(s, {
-          at: now,
-          audit: [
-            {
-              entityType: "Award",
-              entityId: a.id,
-              action: "Awarded",
-              newValue: a,
-              actor: s.role,
-            },
-          ],
-          events: [grantedEvent(a, s.role, now)],
-        }),
-      };
-    });
-  }, []);
-
-  const revokeAward = useCallback(
-    (id: string, reason: string, effective: string, timing: "immediate" | "next") => {
-      setState((s) => {
-        const award = s.awards.find((a) => a.id === id);
-        if (!award) return s;
-        const now = new Date().toISOString();
-        const revocation = makeRevocation({
-          at: now,
-          effective,
-          timing,
-          cause: "Revoked by hand",
-          reason,
-          by: s.role,
-        });
-        return {
-          ...s,
-          awards: s.awards.map((a) =>
-            a.id === id ? { ...a, status: "Revoked" as const, revocation } : a,
-          ),
-          ...record(s, {
-            at: now,
-            audit: [
-              {
-                entityType: "Award",
-                entityId: id,
-                action: `Revoked (${timing === "immediate" ? "immediate" : "next session"}, from ${effective})`,
-                reason,
-                actor: s.role,
-              },
-            ],
-            events: [revokedEvent(award, revocation, s.role)],
-          }),
-        };
-      });
-    },
-    [],
-  );
-
-  const updateAwardComponent = useCallback(
-    (
-      awardId: string,
-      feeHead: string,
-      patch: { isOverridden?: boolean; overrideReason?: string; overrideAuthority?: string },
-    ) => {
-      setState((s) => ({
-        ...s,
-        awards: s.awards.map((a) =>
-          a.id === awardId
-            ? {
-                ...a,
-                components: a.components.map((c) =>
-                  c.feeHead === feeHead ? { ...c, ...patch } : c,
-                ),
-              }
-            : a,
-        ),
-      }));
-    },
-    [],
-  );
-
-  const reorderScholarships = useCallback((orderedIds: string[]) => {
-    setState((s) => {
-      const byId = new Map(s.scholarships.map((x) => [x.id, x]));
-      const next = orderedIds.map((id) => byId.get(id)).filter((x): x is Scholarship => !!x);
-      // append any missing (shouldn't happen)
-      for (const x of s.scholarships) if (!orderedIds.includes(x.id)) next.push(x);
-      return {
-        ...s,
-        scholarships: next,
-        audit: [
-          {
-            id: `au-${s.audit.length + 1}`,
-            entityType: "Scholarship",
-            entityId: "precedence",
-            action: "Reordered scholarship precedence",
-            actor: s.role,
-            timestamp: new Date().toISOString(),
-          },
-          ...s.audit,
-        ],
-      };
-    });
-  }, []);
-
-  const addFeeHead = useCallback((name: string) => {
-    setState((s) => (s.feeHeads.includes(name) ? s : { ...s, feeHeads: [...s.feeHeads, name] }));
-  }, []);
-
-  const deleteFeeHead = useCallback((name: string) => {
-    let ok = true;
-    setState((s) => {
-      const inUse = s.scholarships.some(
-        (sch) => sch.status === "Active" && sch.coverage.some((c) => c.feeHead === name),
-      );
-      if (inUse) {
-        ok = false;
-        return s;
-      }
-      return { ...s, feeHeads: s.feeHeads.filter((f) => f !== name) };
-    });
-    return ok;
-  }, []);
-
-  const assignBatch = useCallback(
-    (
-      scholarshipId: string,
-      picks: {
-        student: Student;
-        components: Award["components"];
-        overrideAuthority?: string;
-        overrideRef?: string;
-        overrideReason?: string;
-      }[],
-      mode: "Evaluate" | "Direct",
-      reason: string,
-    ): string => {
-      const batchId = `bat-${Date.now()}`;
-      setState((s) => {
-        const sch = s.scholarships.find((x) => x.id === scholarshipId);
-        const now = new Date().toISOString();
-        const newAwards: Award[] = picks.map((p, i) => ({
-          id: `aw-${Date.now()}-${i}`,
-          studentRegNo: p.student.regNo,
-          scholarshipId,
-          status: "Active" as const,
-          components: p.components,
-          effectiveFrom: now.slice(0, 10),
-          authorisedBy: p.overrideAuthority ?? "Registrar Office",
-          reasonCode: p.overrideRef ? `Override: ${p.overrideRef}` : reason,
-          batchId,
-        }));
-        const batch: AssignmentBatch = {
-          id: batchId,
-          scholarshipId,
-          actor: s.role,
-          timestamp: now,
-          reason,
-          mode,
-          awardIds: newAwards.map((a) => a.id),
-          undone: false,
-        };
-        return {
-          ...s,
-          awards: [...s.awards, ...newAwards],
-          batches: [batch, ...s.batches],
-          ...record(s, {
-            at: now,
-            audit: [
-              {
-                entityType: "Batch",
-                entityId: batchId,
-                action: `Assigned ${sch?.name ?? scholarshipId} to ${newAwards.length} student${newAwards.length === 1 ? "" : "s"} (${mode})`,
-                reason,
-                actor: s.role,
-                newValue: { awardIds: newAwards.map((a) => a.id) },
-              },
-            ],
-            events: newAwards.map((a) => grantedEvent(a, s.role, now)),
-          }),
-        };
-      });
-      return batchId;
-    },
-    [],
-  );
-
-  /**
-   * Undo a batch assignment.
-   *
-   * The awards are deleted rather than revoked, deliberately: an undone
-   * mis-click is not something a student ever held, and it should not appear on
-   * their financial record as a scholarship that was taken away from them. The
-   * history is not lost — the grant and this undo are both on the event log, so
-   * counts still reconcile, and revocation reports exclude undone awards
-   * because they were never revoked.
-   */
-  const undoBatch = useCallback((batchId: string) => {
-    setState((s) => {
-      const batch = s.batches.find((b) => b.id === batchId);
-      if (!batch || batch.undone) return s;
-      const now = new Date().toISOString();
-      const removed = s.awards.filter((a) => batch.awardIds.includes(a.id));
-      return {
-        ...s,
-        awards: s.awards.filter((a) => !batch.awardIds.includes(a.id)),
-        batches: s.batches.map((b) => (b.id === batchId ? { ...b, undone: true } : b)),
-        ...record(s, {
-          at: now,
-          audit: [
-            {
-              entityType: "Batch",
-              entityId: batchId,
-              action: `Undid batch, removed ${batch.awardIds.length} awards`,
-              actor: s.role,
-            },
-          ],
-          events: removed.map((a) => ({
-            kind: "award.undone" as const,
-            at: now,
-            actor: s.role,
-            awardId: a.id,
-            studentRegNo: a.studentRegNo,
-            scholarshipId: a.scholarshipId,
-            batchId,
-          })),
-        }),
-      };
-    });
-  }, []);
-
-  const setRole = useCallback((role: Role) => {
-    setState((s) => (s.role === role ? s : { ...s, role }));
-  }, []);
-
-  /**
-   * Admissions data is argued over. Appeals, corrections and disputes all end
-   * up asking "what did this field say before, and who changed it", so every
-   * changed field is logged one by one rather than as one opaque object diff.
-   */
-  const updateStudent = useCallback((regNo: string, patch: Partial<Student>, reason: string) => {
-    setState((s) => {
-      const old = s.students.find((x) => x.regNo === regNo);
-      if (!old) return s;
-      const changed = (Object.keys(patch) as (keyof Student)[]).filter(
-        (k) => patch[k] !== undefined && patch[k] !== old[k],
-      );
-      if (changed.length === 0) return s;
-      const updated: Student = { ...old, ...patch };
-      const now = new Date().toISOString();
-      const entries: AuditEntry[] = changed.map((k, i) => ({
-        id: `au-${s.audit.length + 1 + i}`,
-        entityType: "Student",
-        entityId: regNo,
-        action: `Changed ${String(k)}`,
-        oldValue: old[k],
-        newValue: updated[k],
-        reason,
-        actor: s.role,
-        timestamp: now,
-      }));
-      return {
-        ...s,
-        students: s.students.map((x) => (x.regNo === regNo ? updated : x)),
-        audit: [...entries.reverse(), ...s.audit],
-      };
-    });
-  }, []);
-
-  const submitApplication = useCallback((a: NeedApplication) => {
-    setState((s) => ({
-      ...s,
-      applications: [a, ...s.applications],
-      audit: [
-        {
-          id: `au-${s.audit.length + 1}`,
-          entityType: "Application",
-          entityId: a.id,
-          action: `Applied for a need-based scholarship (${a.semester})`,
-          newValue: { requestedPct: a.requestedPct, monthlyIncome: a.household.monthlyIncome },
-          actor: a.studentRegNo,
-          timestamp: new Date().toISOString(),
-        },
-        ...s.audit,
-      ],
-    }));
-  }, []);
-
-  /**
-   * Approving is the only place an application turns into money. It creates
-   * the award in the same update, so there is never a moment where a student
-   * is "approved" but holds nothing, and the award carries the application id
-   * so either one can be traced back to the other.
-   */
-  const decideApplication = useCallback(
-    (
-      id: string,
-      outcome: "Approved" | "Rejected" | "On hold",
-      reason: string,
-      opts?: { awardedPct?: number; automatic?: boolean },
-    ) => {
-      setState((s) => {
-        const app = s.applications.find((a) => a.id === id);
-        if (!app) return s;
-        const now = new Date().toISOString();
-        const actor = opts?.automatic ? "Eligibility filter" : s.role;
-
-        let awards = s.awards;
-        let awardId: string | undefined;
-        const granted: DomainEvent[] = [];
-        if (outcome === "Approved") {
-          const pct = opts?.awardedPct ?? app.requestedPct;
-          awardId = `aw-${Date.now()}`;
-          const award: Award = {
-            id: awardId,
-            studentRegNo: app.studentRegNo,
-            scholarshipId: app.scholarshipId,
-            status: "Active",
-            components: [
-              {
-                feeHead: "Tuition",
-                entitlement: pct,
-                entitlementKind: "Percentage",
-                entitlementValue: pct,
-                applied: 0,
-                isOverridden: false,
-              },
-            ],
-            effectiveFrom: now.slice(0, 10),
-            authorisedBy: s.role,
-            reasonCode: `Application ${app.id}`,
-          };
-          awards = [...s.awards, award];
-          granted.push(grantedEvent(award, actor, now));
-        }
-
-        return {
-          ...s,
-          awards,
-          applications: s.applications.map((a) =>
-            a.id === id
-              ? {
-                  ...a,
-                  status: outcome,
-                  decision: {
-                    outcome,
-                    by: actor,
-                    role: s.role,
-                    at: now,
-                    reason,
-                    automatic: opts?.automatic,
-                    awardedPct:
-                      outcome === "Approved" ? (opts?.awardedPct ?? a.requestedPct) : undefined,
-                    awardId,
-                  },
-                }
-              : a,
-          ),
-          ...record(s, {
-            at: now,
-            audit: [
-              {
-                entityType: "Application",
-                entityId: id,
-                action: opts?.automatic
-                  ? "Turned down automatically for failing the eligibility criteria"
-                  : outcome === "Approved"
-                    ? `Approved at ${opts?.awardedPct ?? app.requestedPct}% of tuition`
-                    : outcome === "Rejected"
-                      ? "Turned down"
-                      : "Put on hold",
-                oldValue: app.status,
-                newValue: outcome,
-                reason,
-                actor,
-              },
-            ],
-            events: [
-              {
-                kind: "application.decided",
-                at: now,
-                actor,
-                applicationId: id,
-                studentRegNo: app.studentRegNo,
-                outcome,
-                automatic: opts?.automatic ?? false,
-                semester: app.semester,
-              },
-              ...granted,
-            ],
-          }),
-        };
-      });
-    },
-    [],
-  );
-
-  const rejectApplications = useCallback(
-    (entries: { id: string; reason: string }[], summary: string) => {
-      if (entries.length === 0) return;
-      setState((s) => {
-        const byId = new Map(entries.map((e) => [e.id, e.reason]));
-        const now = new Date().toISOString();
-        const hit = s.applications.filter((a) => byId.has(a.id));
-        if (hit.length === 0) return s;
-        return {
-          ...s,
-          applications: s.applications.map((a) =>
-            byId.has(a.id)
-              ? {
-                  ...a,
-                  status: "Rejected" as const,
-                  decision: {
-                    outcome: "Rejected" as const,
-                    by: "Eligibility filter",
-                    role: s.role,
-                    at: now,
-                    reason: byId.get(a.id)!,
-                    automatic: true,
-                  },
-                }
-              : a,
-          ),
-          audit: [
-            {
-              id: `au-${s.audit.length + 1}`,
-              entityType: "Application",
-              entityId: "bulk",
-              action: `Turned down ${hit.length} application${hit.length === 1 ? "" : "s"} that failed the eligibility criteria`,
-              newValue: { ids: hit.map((a) => a.id) },
-              reason: summary,
-              actor: s.role,
-              timestamp: now,
-            },
-            ...s.audit,
-          ],
-        };
-      });
-    },
-    [],
-  );
-
-  /**
-   * Undo a decision. Any award the approval created is revoked in the same
-   * step, otherwise reopening would quietly leave the student holding money
-   * the committee no longer stands behind.
-   */
-  const reopenApplication = useCallback((id: string, reason: string) => {
-    setState((s) => {
-      const app = s.applications.find((a) => a.id === id);
-      if (!app || !app.decision) return s;
-      const now = new Date().toISOString();
-      const madeAward = app.decision.awardId;
-      const award = madeAward ? s.awards.find((a) => a.id === madeAward) : undefined;
-
-      /* Reopening takes back the award the approval created. That is a student
-         losing funding, so it belongs on the event log under its own cause —
-         it used to happen with no award-level record at all. */
-      const revocation = award
-        ? makeRevocation({
-            at: now,
-            effective: now,
-            timing: "immediate",
-            cause: "Application reopened",
-            reason: `Application ${id} was reopened for review: ${reason}`,
-            by: s.role,
-          })
-        : undefined;
-
-      return {
-        ...s,
-        awards:
-          award && revocation
-            ? s.awards.map((a) =>
-                a.id === award.id ? { ...a, status: "Revoked" as const, revocation } : a,
-              )
-            : s.awards,
-        applications: s.applications.map((a) =>
-          a.id === id ? { ...a, status: "Submitted" as const, decision: undefined } : a,
-        ),
-        ...record(s, {
-          at: now,
-          audit: [
-            {
-              entityType: "Application",
-              entityId: id,
-              action: madeAward
-                ? "Reopened for review, and the award it created was taken back"
-                : "Reopened for review",
-              oldValue: app.status,
-              newValue: "Submitted",
-              reason,
-              actor: s.role,
-            },
-          ],
-          events: award && revocation ? [revokedEvent(award, revocation, s.role)] : [],
-        }),
-      };
-    });
-  }, []);
-
-  const updateCriteria = useCallback(
-    (scholarshipId: string, patch: Partial<EligibilityCriteria>, reason: string) => {
-      setState((s) => {
-        const old = s.criteria.find((c) => c.scholarshipId === scholarshipId);
-        if (!old) return s;
-        const updated = { ...old, ...patch };
-        return {
-          ...s,
-          criteria: s.criteria.map((c) => (c.scholarshipId === scholarshipId ? updated : c)),
-          audit: [
-            {
-              id: `au-${s.audit.length + 1}`,
-              entityType: "Criteria",
-              entityId: scholarshipId,
-              action: "Changed the eligibility criteria",
-              oldValue: old,
-              newValue: updated,
-              reason,
-              actor: s.role,
-              timestamp: new Date().toISOString(),
-            },
-            ...s.audit,
-          ],
-        };
-      });
-    },
-    [],
-  );
-
-  const value = useMemo<StoreCtx>(
-    () => ({
-      ...state,
-      setRole,
-      updateStudent,
-      submitApplication,
-      decideApplication,
-      rejectApplications,
-      reopenApplication,
-      updateCriteria,
-      addScholarship,
-      updateScholarship,
-      archiveScholarship,
-      restoreScholarship,
-      addAward,
-      editAwardByHand,
-      revokeAward,
-      updateAwardComponent,
-      pushAudit,
-      reorderScholarships,
-      addFeeHead,
-      deleteFeeHead,
-      assignBatch,
-      undoBatch,
-    }),
-    [
-      state,
-      setRole,
-      updateStudent,
-      submitApplication,
-      decideApplication,
-      rejectApplications,
-      reopenApplication,
-      updateCriteria,
-      addScholarship,
-      updateScholarship,
-      archiveScholarship,
-      restoreScholarship,
-      addAward,
-      editAwardByHand,
-      revokeAward,
-      updateAwardComponent,
-      pushAudit,
-      reorderScholarships,
-      addFeeHead,
-      deleteFeeHead,
-      assignBatch,
-      undoBatch,
+  const results = useQueries({
+    queries: [
+      { queryKey: keys.scholarships, queryFn: unwrap<Scholarship[]>("/scholarships"), enabled },
+      { queryKey: keys.students, queryFn: () => fetchAllPages<Student>("/students"), enabled },
+      { queryKey: keys.awards, queryFn: unwrap<Award[]>("/awards"), enabled },
+      { queryKey: keys.audit, queryFn: () => fetchAllPages<AuditEntry>("/audit"), enabled },
+      { queryKey: keys.events, queryFn: unwrap<DomainEvent[]>("/events"), enabled },
+      { queryKey: keys.batches, queryFn: unwrap<AssignmentBatch[]>("/assignments"), enabled },
+      {
+        queryKey: keys.applications,
+        queryFn: unwrap<ScreenedApplication[]>("/applications"),
+        enabled,
+      },
+      { queryKey: keys.criteria, queryFn: unwrap<EligibilityCriteria[]>("/criteria"), enabled },
+      { queryKey: keys.reference, queryFn: () => api.get<Reference>("/reference"), enabled },
     ],
-  );
+  });
+
+  const [
+    scholarships,
+    students,
+    awards,
+    audit,
+    events,
+    batches,
+    applications,
+    criteria,
+    reference,
+  ] = results;
+
+  const value = useStoreValue({
+    queryClient,
+    // Reporting is the least a role can hold, so a screen rendering before the
+    // session resolves draws the read-only view rather than a full one it then
+    // has to take back.
+    role: user?.role ?? "Reporting",
+    scholarships: scholarships.data ?? [],
+    students: students.data ?? [],
+    awards: awards.data ?? [],
+    audit: audit.data ?? [],
+    events: events.data ?? [],
+    batches: batches.data ?? [],
+    // The queue endpoint returns each application already screened; the screens
+    // still compute their own view of it, so only the application is lifted out
+    // here. See useApplications.ts.
+    applications: (applications.data ?? []).map((entry) => entry.application),
+    criteria: criteria.data ?? [],
+    feeHeads: reference.data?.feeHeads ?? [],
+  });
+
+  if (!enabled) {
+    // Signed out. The sign-in screen stands in for the whole application, so
+    // there is nothing to render here and nothing to load.
+    return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  }
+
+  if (results.some((result) => result.isPending)) {
+    return <LoadingScreen />;
+  }
+
+  const failed = results.find((result) => result.isError);
+
+  if (failed) {
+    return <LoadFailedScreen onRetry={() => queryClient.refetchQueries()} />;
+  }
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
+function LoadingScreen() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <p className="text-[15px] text-muted-foreground" role="status">
+        Loading…
+      </p>
+    </div>
+  );
+}
+
+function LoadFailedScreen({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="max-w-md text-center">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">This did not load</h1>
+        <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">
+          The server could not be reached. No records were changed.
+        </p>
+        <button
+          onClick={onRetry}
+          className="mt-6 inline-flex h-11 items-center justify-center rounded-xl bg-primary px-6 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          Try again
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function useStore(): StoreCtx {
-  const c = useContext(Ctx);
-  if (!c) throw new Error("useStore must be used within ScholarshipProvider");
-  return c;
+  const ctx = useContext(Ctx);
+  if (!ctx) throw new Error("useStore must be used inside <ScholarshipProvider>");
+  return ctx;
+}
+
+/* -- Mutations ------------------------------------------------------------ */
+
+// historyStartedAt is derived from the logs rather than passed in, so it is the
+// one piece of state this hook computes instead of receiving.
+interface StoreInputs extends Omit<StoreState, "historyStartedAt"> {
+  queryClient: QueryClient;
+}
+
+/**
+ * Every mutation, wired to the endpoint that performs it.
+ *
+ * Each one awaits the server and then invalidates what the change could have
+ * touched. The lists are deliberately over-invalidated rather than surgically
+ * patched: granting an award moves the merge for that student, writes an audit
+ * entry and an event, and can cut back another award through the ceiling.
+ * Working out which caches that leaves stale is exactly the reasoning the
+ * server already did, and getting it wrong here shows a registrar a number that
+ * is not the one in the database.
+ */
+function useStoreValue(inputs: StoreInputs): StoreCtx {
+  const { queryClient, role } = inputs;
+
+  /** Anything a write could have moved. */
+  const refresh = useCallback(
+    async (...touched: readonly (readonly string[])[]) => {
+      await Promise.all(
+        // The audit trail and the event log are written by every mutation, so
+        // they are always in the set.
+        [...touched, keys.audit, keys.events].map((queryKey) =>
+          queryClient.invalidateQueries({ queryKey }),
+        ),
+      );
+    },
+    [queryClient],
+  );
+
+  const historyStartedAt = useMemo(() => {
+    const stamps = [
+      ...inputs.events.map((e) => e.at),
+      ...inputs.audit.map((entry) => entry.timestamp),
+    ].filter(Boolean);
+
+    // Nothing on record yet: the history starts now, and a question about any
+    // earlier period is unanswerable rather than empty.
+    return stamps.length ? stamps.reduce((a, b) => (a < b ? a : b)) : new Date().toISOString();
+  }, [inputs.events, inputs.audit]);
+
+  const componentsFor = useCallback(
+    (awardId: string) => inputs.awards.find((a) => a.id === awardId)?.components ?? [],
+    [inputs.awards],
+  );
+
+  return useMemo<StoreCtx>(
+    () => ({
+      scholarships: inputs.scholarships,
+      students: inputs.students,
+      awards: inputs.awards,
+      audit: inputs.audit,
+      feeHeads: inputs.feeHeads,
+      batches: inputs.batches,
+      applications: inputs.applications,
+      criteria: inputs.criteria,
+      events: inputs.events,
+      historyStartedAt,
+      role,
+
+      addScholarship: async (scholarship, reason) => {
+        // The id is the server's to mint. The prototype generated one here
+        // because there was nowhere else; a ULID from the database sorts by
+        // creation time and cannot collide with a second tab.
+        const { id: _id, ...fields } = scholarship;
+        await api.post("/scholarships", { ...fields, reason });
+        await refresh(keys.scholarships, keys.criteria);
+      },
+
+      updateScholarship: async (id, patch, reason) => {
+        await api.patch(`/scholarships/${id}`, { ...patch, reason });
+        await refresh(keys.scholarships, keys.awards);
+      },
+
+      archiveScholarship: async (id, endExisting, semester) => {
+        await api.post(`/scholarships/${id}/archive`, { endExisting, semester });
+        // Archiving can end every award on the scholarship, which moves the
+        // merge for each of those students.
+        await refresh(keys.scholarships, keys.awards, keys.batches);
+      },
+
+      restoreScholarship: async (id, reason) => {
+        await api.post(`/scholarships/${id}/restore`, { reason });
+        await refresh(keys.scholarships);
+      },
+
+      reorderScholarships: async (orderedIds) => {
+        await api.put("/scholarships/precedence", { order: orderedIds });
+        // Precedence decides who claims a fee head first, so reordering
+        // changes what every existing award actually pays.
+        await refresh(keys.scholarships, keys.awards);
+      },
+
+      addAward: async (award) => {
+        // A single grant is a batch of one. Going through the same endpoint
+        // means it gets the same batch row, the same event and the same undo as
+        // any other assignment, rather than a second path that only looks alike.
+        await api.post(`/scholarships/${award.scholarshipId}/assignments`, {
+          mode: "Direct",
+          reason: award.reasonCode,
+          picks: [{ studentRegNo: award.studentRegNo, components: award.components }],
+        });
+        await refresh(keys.awards, keys.batches);
+      },
+
+      editAwardByHand: async (awardId, components, reason) => {
+        await api.patch(`/awards/${awardId}/components`, { components, reason });
+        await refresh(keys.awards);
+      },
+
+      updateAwardComponent: async (awardId, feeHead, patch) => {
+        // The endpoint replaces the whole set, so the unchanged lines have to
+        // be sent back alongside the changed one.
+        const components = componentsFor(awardId).map((component) =>
+          component.feeHead === feeHead ? { ...component, ...patch } : component,
+        );
+
+        await api.patch(`/awards/${awardId}/components`, {
+          components,
+          reason: patch.overrideReason ?? "Pinned an amount by hand",
+        });
+        await refresh(keys.awards);
+      },
+
+      revokeAward: async (id, reason, effective, timing) => {
+        // No `by`. Who revoked an award is the signed-in user, decided by the
+        // server from the session — the client used to send its own idea of the
+        // role and the server stored it, which let the revocation record and
+        // the audit trail disagree about who ended someone's funding.
+        await api.post(`/awards/${id}/revoke`, {
+          effective,
+          timing,
+          cause: "Revoked by hand",
+          reason,
+        });
+        await refresh(keys.awards);
+      },
+
+      assignBatch: async (scholarshipId, picks, mode, reason) => {
+        const { data } = await api.post<Envelope<{ id: string }>>(
+          `/scholarships/${scholarshipId}/assignments`,
+          {
+            mode,
+            reason,
+            picks: picks.map((pick) => ({
+              studentRegNo: pick.student.regNo,
+              components: pick.components,
+              overrideAuthority: pick.overrideAuthority ?? null,
+              overrideRef: pick.overrideRef ?? null,
+            })),
+          },
+        );
+
+        await refresh(keys.awards, keys.batches);
+
+        return data.id;
+      },
+
+      undoBatch: async (batchId) => {
+        await api.delete(`/assignments/${batchId}`);
+        await refresh(keys.awards, keys.batches);
+      },
+
+      updateStudent: async (regNo, patch, reason) => {
+        await api.patch(`/students/${regNo}`, { ...patch, reason });
+        // A changed CGPA or credit load changes who qualifies, so the screened
+        // queue is stale too.
+        await refresh(keys.students, keys.applications);
+      },
+
+      submitApplication: async (application) => {
+        const { id: _id, decision: _decision, ...fields } = application;
+        await api.post("/applications", fields);
+        await refresh(keys.applications);
+      },
+
+      decideApplication: async (id, outcome, reason, opts) => {
+        await api.post(`/applications/${id}/decision`, {
+          outcome,
+          reason,
+          awardedPct: opts?.awardedPct ?? null,
+          automatic: opts?.automatic ?? false,
+        });
+        // Approving grants the award in the same transaction.
+        await refresh(keys.applications, keys.awards);
+      },
+
+      rejectApplications: async (entries, summary) => {
+        await api.post("/applications/reject", { entries, summary });
+        await refresh(keys.applications, keys.awards);
+      },
+
+      reopenApplication: async (id, reason) => {
+        await api.post(`/applications/${id}/reopen`, { reason });
+        await refresh(keys.applications, keys.awards);
+      },
+
+      updateCriteria: async (scholarshipId, patch, reason) => {
+        // PUT replaces the whole thing, so the current values are the base.
+        const current = inputs.criteria.find((c) => c.scholarshipId === scholarshipId);
+        const merged = { ...current, ...patch } as EligibilityCriteria;
+
+        await api.put(`/scholarships/${scholarshipId}/criteria`, {
+          maxMonthlyIncome: merged.maxMonthlyIncome,
+          minCreditHours: merged.minCreditHours,
+          minAttendancePct: merged.minAttendancePct,
+          requiredDocuments: merged.requiredDocuments ?? [],
+          maxExistingCoveragePct: merged.maxExistingCoveragePct,
+          autoRejectOn: merged.autoRejectOn ?? [],
+          cgpaThresholds: (merged.cgpaThresholds ?? []).map((t) => ({
+            fromBatch: t.fromBatch,
+            minCgpa: t.minCgpa,
+          })),
+          reason,
+        });
+        // The criteria decide every verdict in the queue.
+        await refresh(keys.criteria, keys.applications);
+      },
+
+      addFeeHead: async (name) => {
+        await api.post("/fee-heads", { name });
+        await refresh(keys.reference);
+      },
+
+      deleteFeeHead: async (name) => {
+        try {
+          await api.delete(`/fee-heads/${encodeURIComponent(name)}`);
+          await refresh(keys.reference);
+          return true;
+        } catch {
+          // Refused because it is a core head, or an active scholarship still
+          // covers it. false is the same answer the in-memory store gave, and
+          // the caller shows its own message.
+          return false;
+        }
+      },
+    }),
+    [inputs, historyStartedAt, role, refresh, componentsFor],
+  );
 }

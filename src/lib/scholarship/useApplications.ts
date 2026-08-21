@@ -82,7 +82,15 @@ export function useScreenedApplications(): ScreenedApplication[] {
   }, [applications, students, awards, scholarships, criteria]);
 }
 
-export function useNeedCriteria(scholarshipId = "sch-need"): EligibilityCriteria | undefined {
+/**
+ * The criteria for one scholarship.
+ *
+ * The scholarship is a required argument. It used to default to `"sch-need"`,
+ * a slug from seed.ts that no live scholarship carries — every one is issued a
+ * real ULID by the database — so calling this without an argument returned
+ * undefined for every scholarship that exists.
+ */
+export function useNeedCriteria(scholarshipId: string): EligibilityCriteria | undefined {
   const { criteria } = useStore();
   return criteria.find((c) => c.scholarshipId === scholarshipId);
 }

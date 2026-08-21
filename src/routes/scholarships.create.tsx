@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { RequiresCapability } from "@/components/scholarship/RequiresCapability";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/scholarship/AppShell";
 import { useStore } from "@/lib/scholarship/store";
@@ -6,7 +7,7 @@ import { ScholarshipForm } from "@/components/scholarship/ScholarshipForm";
 import { HowTo } from "@/components/scholarship/guidance";
 
 export const Route = createFileRoute("/scholarships/create")({
-  component: CreateScholarshipPage,
+  component: GuardedCreateScholarshipPage,
   head: () => ({
     meta: [
       { title: "Add a scholarship | BNU Scholarships" },
@@ -65,5 +66,20 @@ function CreateScholarshipPage() {
         />
       </div>
     </>
+  );
+}
+
+/**
+ * The permission boundary for this screen, applied before it renders.
+ *
+ * The sidebar hides this destination from roles that cannot use it, but a
+ * URL is reachable regardless of what the menu shows. See
+ * RequiresCapability for why the message arrives here rather than at save.
+ */
+function GuardedCreateScholarshipPage() {
+  return (
+    <RequiresCapability needs="scholarships.edit" what="add or change a scholarship">
+      <CreateScholarshipPage />
+    </RequiresCapability>
   );
 }

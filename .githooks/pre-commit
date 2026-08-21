@@ -1,0 +1,261 @@
+#!/usr/bin/env bash
+# =============================================================================
+# pre-commit
+#
+# Refuses commits that would put secrets or real student data into git history.
+#
+# Install it with:  ./scripts/install-hooks.sh
+#
+# -----------------------------------------------------------------------------
+# WHY IT IS BUILT IN THREE LAYERS
+#
+#   Layer 1  filenames    pure shell, no dependencies
+#   Layer 2  file size    pure shell, no dependencies
+#   Layer 3  content      gitleaks, if it is available
+#
+# Layers 1 and 2 catch the accidents that actually happen: a committed .env, a
+# students.sql someone exported to look at, a spreadsheet dragged into the
+# folder. They need nothing installed, so they keep working when Docker is
+# closed and on a machine that has never run the setup script.
+#
+# Layer 3 is the thorough one and the one with dependencies. If it cannot run,
+# the commit is allowed with a warning rather than blocked. Blocking every
+# commit on a laptop where Docker happens to be shut is how a hook gets
+# uninstalled, and an uninstalled hook protects nothing.
+#
+# -----------------------------------------------------------------------------
+# WHAT THIS HOOK IS NOT
+#
+# It is not a security control. Anyone can pass --no-verify. It exists to catch
+# honest mistakes made in a hurry. The controls that do not rely on goodwill
+# are .gitignore, review before merging to main, and secret scanning in CI.
+#
+# -----------------------------------------------------------------------------
+# OVERRIDES
+#
+#   SKIP_SECRET_SCAN=1 git commit ...   skips layer 3 only
+#   MAX_FILE_SIZE_BYTES=20000000 ...    raises the layer 2 limit for one commit
+#
+# There is deliberately no override for layer 1. If you genuinely need to
+# commit a file whose name matches, rename it or add a narrow exception to this
+# hook in a commit somebody reviews.
+# =============================================================================
+
+set -uo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "${REPO_ROOT}" || exit 1
+
+# Git Bash rewrites Unix-looking paths before passing them to native programs.
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL='*'
+
+if [ -t 2 ]; then
+    C_RESET=$'\033[0m'; C_RED=$'\033[31m'; C_YELLOW=$'\033[33m'; C_BOLD=$'\033[1m'
+else
+    C_RESET=''; C_RED=''; C_YELLOW=''; C_BOLD=''
+fi
+
+MAX_FILE_SIZE_BYTES="${MAX_FILE_SIZE_BYTES:-5242880}"   # 5 MiB
+FAILED=0
+
+fail_header() {
+    if [ "${FAILED}" -eq 0 ]; then
+        printf '\n%s\n' "${C_RED}${C_BOLD}COMMIT REFUSED${C_RESET}" >&2
+        printf '%s\n\n' "------------------------------------------------------------" >&2
+    fi
+    FAILED=1
+}
+
+# -----------------------------------------------------------------------------
+# Collect staged files.
+#
+# --diff-filter=ACMR covers added, copied, modified and renamed, and leaves out
+# deletions, which cannot introduce anything. -z and the null-delimited read
+# are what make filenames containing spaces work, and this repository already
+# contains such a file.
+# -----------------------------------------------------------------------------
+staged_files=()
+while IFS= read -r -d '' f; do
+    staged_files+=("$f")
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+if [ "${#staged_files[@]}" -eq 0 ]; then
+    exit 0
+fi
+
+# =============================================================================
+# Layer 1: filenames that must never be committed
+# =============================================================================
+for f in "${staged_files[@]}"; do
+    base="$(basename "$f")"
+    lower="$(printf '%s' "$base" | tr '[:upper:]' '[:lower:]')"
+    reason=""
+
+    case "${lower}" in
+        # --- Environment files --------------------------------------------
+        # .env.example is the one that is meant to be committed.
+        .env.example)
+            ;;
+        .env|.env.*|*.env)
+            reason="an environment file, which holds real credentials" ;;
+
+        # --- Databases and dumps ------------------------------------------
+        *.sql|*.sql.gz|*.dump|*.pgdump|*.sqlite|*.sqlite3|*.db|*.mdb|*.bak)
+            reason="a database file or dump, which would carry real records" ;;
+
+        # --- Spreadsheets and exports -------------------------------------
+        # The usual shape of a real student list.
+        *.csv|*.tsv|*.xls|*.xlsx|*.ods)
+            reason="a data export, which is how real student lists travel" ;;
+
+        # --- Backup archives ----------------------------------------------
+        forgejo-backup-*.tar.gz|forgejo-backup-*.tar|forgejo-dump-*.zip)
+            reason="a Forgejo backup, which contains the entire user database" ;;
+
+        # --- Keys and certificates ----------------------------------------
+        *.pem|*.p12|*.pfx|*.jks|*.keystore|*.kdbx)
+            reason="a certificate or key store" ;;
+        id_rsa|id_dsa|id_ecdsa|id_ed25519)
+            reason="a private SSH key" ;;
+        *.key)
+            # .key is also a legitimate extension for some non-secret assets,
+            # so name the risk rather than assuming the worst silently.
+            reason="a key file" ;;
+    esac
+
+    if [ -n "${reason}" ]; then
+        fail_header
+        printf '  %s\n' "${C_BOLD}${f}${C_RESET}" >&2
+        printf '    This is %s.\n' "${reason}" >&2
+        printf '\n' >&2
+        printf '    Unstage it:   git restore --staged "%s"\n' "$f" >&2
+        printf '    Keep it out:  add a matching line to .gitignore\n' >&2
+        printf '\n' >&2
+    fi
+done
+
+# =============================================================================
+# Layer 2: file size
+#
+# Measures the STAGED content rather than the file on disk, which is what will
+# actually be committed. Large files arriving unexpectedly is what a database
+# dump, a build output, or a folder of images looks like from here.
+# =============================================================================
+for f in "${staged_files[@]}"; do
+    blob="$(git rev-parse ":$f" 2>/dev/null)" || continue
+    size="$(git cat-file -s "${blob}" 2>/dev/null)" || continue
+
+    if [ "${size}" -gt "${MAX_FILE_SIZE_BYTES}" ]; then
+        fail_header
+        printf '  %s\n' "${C_BOLD}${f}${C_RESET}" >&2
+        printf '    %s bytes, over the %s byte limit.\n' "${size}" "${MAX_FILE_SIZE_BYTES}" >&2
+        printf '\n' >&2
+        printf '    Large files are usually a dump, a build output, or media that\n' >&2
+        printf '    was not meant to be committed. Git keeps them forever, in every\n' >&2
+        printf '    clone, even after a later commit deletes them.\n' >&2
+        printf '\n' >&2
+        printf '    If it genuinely belongs here:\n' >&2
+        printf '      MAX_FILE_SIZE_BYTES=%s git commit ...\n' "$((size + 1024))" >&2
+        printf '\n' >&2
+    fi
+done
+
+# Stop before the content scan if the cheap checks already failed. There is no
+# value in also listing what gitleaks found inside a file that is being
+# rejected anyway.
+if [ "${FAILED}" -ne 0 ]; then
+    printf '%s\n' "------------------------------------------------------------" >&2
+    printf 'Nothing was committed. Fix the above and try again.\n\n' >&2
+    exit 1
+fi
+
+# =============================================================================
+# Layer 3: content scanning with gitleaks
+# =============================================================================
+if [ "${SKIP_SECRET_SCAN:-0}" = "1" ]; then
+    printf '\n%s\n' "${C_YELLOW}WARNING${C_RESET} SKIP_SECRET_SCAN=1, secret scanning was skipped." >&2
+    printf '        Filename and size checks still ran and passed.\n\n' >&2
+    exit 0
+fi
+
+CONFIG_ARG=()
+[ -f "${REPO_ROOT}/.gitleaks.toml" ] && CONFIG_ARG=(--config "${REPO_ROOT}/.gitleaks.toml")
+
+scan_output=""
+scan_status=0
+scan_ran=0
+
+if command -v gitleaks >/dev/null 2>&1; then
+    scan_ran=1
+    # The gitleaks command line changed during v8: `protect` was replaced by
+    # `git`. Probe for the newer form rather than pinning to one, so this hook
+    # keeps working across versions.
+    if gitleaks git --help >/dev/null 2>&1; then
+        scan_output="$(gitleaks git --staged --no-banner --redact "${CONFIG_ARG[@]}" . 2>&1)"
+        scan_status=$?
+    else
+        scan_output="$(gitleaks protect --staged --no-banner --redact "${CONFIG_ARG[@]}" 2>&1)"
+        scan_status=$?
+    fi
+
+elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    # Docker fallback. Needs the repository mounted, and on Windows that means
+    # handing Docker a Windows path rather than the /e/... form Git Bash uses.
+    host_repo="${REPO_ROOT}"
+    if command -v cygpath >/dev/null 2>&1; then
+        host_repo="$(cygpath -w "${REPO_ROOT}" 2>/dev/null || printf '%s' "${REPO_ROOT}")"
+    fi
+
+    scan_output="$(docker run --rm \
+        -v "${host_repo}:/repo" \
+        -w /repo \
+        ghcr.io/gitleaks/gitleaks:latest \
+        git --staged --no-banner --redact --config /repo/.gitleaks.toml . 2>&1)"
+    scan_status=$?
+
+    # Distinguish "gitleaks found something" from "the container could not
+    # start", usually a Docker Desktop drive-sharing problem on Windows.
+    if printf '%s' "${scan_output}" | grep -qiE 'docker: |error during connect|is not shared|mount denied|invalid reference'; then
+        scan_ran=0
+    else
+        scan_ran=1
+    fi
+fi
+
+if [ "${scan_ran}" -eq 0 ]; then
+    printf '\n%s\n' "${C_YELLOW}WARNING${C_RESET} gitleaks could not run, so this commit was not scanned for secrets." >&2
+    printf '        Filename and size checks ran and passed.\n' >&2
+    printf '\n' >&2
+    printf '        To enable scanning, install the gitleaks binary:\n' >&2
+    printf '          https://github.com/gitleaks/gitleaks/releases\n' >&2
+    printf '        or start Docker Desktop and commit again.\n\n' >&2
+    exit 0
+fi
+
+if [ "${scan_status}" -ne 0 ]; then
+    printf '\n%s\n' "${C_RED}${C_BOLD}COMMIT REFUSED${C_RESET}" >&2
+    printf '%s\n\n' "------------------------------------------------------------" >&2
+    printf '  gitleaks found something that looks like a secret or personal data.\n\n' >&2
+    printf '%s\n' "${scan_output}" >&2
+    printf '\n' >&2
+    printf '  Secret values are redacted above. Look at the file and line named.\n' >&2
+    printf '\n' >&2
+    printf '  If it is a real secret:\n' >&2
+    printf '    1. Remove it from the file and put it in .env instead.\n' >&2
+    printf '    2. Treat the value as compromised and rotate it, even though the\n' >&2
+    printf '       commit was blocked. It has been on disk and in your shell.\n' >&2
+    printf '\n' >&2
+    printf '  If it is real student data, it must not be committed under any\n' >&2
+    printf '  circumstances. Once it is in history it is in every clone.\n' >&2
+    printf '\n' >&2
+    printf '  If it is a false positive, add a narrow exception to .gitleaks.toml\n' >&2
+    printf '  in a commit somebody reviews. Do not widen the allowlist to make a\n' >&2
+    printf '  single file pass.\n' >&2
+    printf '\n' >&2
+    printf '%s\n' "------------------------------------------------------------" >&2
+    printf 'Nothing was committed.\n\n' >&2
+    exit 1
+fi
+
+exit 0
