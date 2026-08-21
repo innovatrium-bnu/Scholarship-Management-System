@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Info, Plus, RotateCcw, Save, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/scholarship/AppShell";
@@ -7,7 +7,8 @@ import { useStore } from "@/lib/scholarship/store";
 import { useScreenedApplications } from "@/lib/scholarship/useApplications";
 import { screen } from "@/lib/scholarship/screening";
 import { can } from "@/lib/scholarship/roles";
-import { BATCHES } from "@/lib/scholarship/seed";
+import { BATCHES as BATCH_FALLBACK } from "@/lib/scholarship/batch-order";
+import { useReference } from "@/lib/scholarship/reference";
 import { pkr } from "@/components/scholarship/helpers";
 import { Callout, EmptyState, SectionCard, StatCard } from "@/components/scholarship/ui-kit";
 import { HowTo, StepHeading } from "@/components/scholarship/guidance";
@@ -71,8 +72,15 @@ const CRITERION_LABEL: Record<CriterionId, { label: string; blurb: string }> = {
   },
 };
 
-/** BATCHES widened, so thresholds can be sorted into chronological order. */
-const BATCH_ORDER: readonly string[] = BATCHES;
+/**
+ * The order thresholds are sorted into.
+ *
+ * The domain fallback rather than the loaded list, because this is module
+ * scope and because ordering is a domain question: it mirrors
+ * App\Domain\Support\BatchOrder, which the API says the same thing about.
+ * The dropdown below offers the live list.
+ */
+const BATCH_ORDER: readonly string[] = BATCH_FALLBACK;
 
 const ORDER: CriterionId[] = [
   "cgpa",
@@ -85,13 +93,43 @@ const ORDER: CriterionId[] = [
 ];
 
 function CriteriaPage() {
-  const { criteria, applications, students, updateCriteria, role } = useStore();
-  const live = criteria.find((c) => c.scholarshipId === "sch-need");
+  const { criteria, scholarships, applications, students, updateCriteria, role } = useStore();
+  // The batches table, so a newly added intake is selectable without a deploy.
+  const { batches: BATCHES } = useReference();
   const screened = useScreenedApplications();
   const mayEdit = can(role, "criteria.edit");
 
+  /*
+   * Which scholarship's criteria this screen is editing.
+   *
+   * It used to be `criteria.find((c) => c.scholarshipId === "sch-need")`. That
+   * id is a slug from seed.ts, which nothing has read since the Oracle backend
+   * landed — every scholarship is issued a real ULID now, so the lookup matched
+   * nothing and the screen rendered "No criteria are configured" against a
+   * database that had criteria in it. Saving was worse: the id went to
+   * `PUT /api/scholarships/sch-need/criteria`, a 404 that surfaced as a failed
+   * save with no explanation.
+   *
+   * Taken from the data instead. There is one criteria row today, so the
+   * picker below stays hidden; if a second scholarship gains criteria it
+   * appears, rather than this screen silently editing whichever came first.
+   */
+  const [editing, setEditing] = useState<string | null>(null);
+  const live = criteria.find((c) => c.scholarshipId === editing) ?? criteria[0];
+
+  const nameOf = (scholarshipId: string) =>
+    scholarships.find((s) => s.id === scholarshipId)?.name ?? scholarshipId;
+
   const [draft, setDraft] = useState<EligibilityCriteria | null>(live ?? null);
   const [reason, setReason] = useState("");
+
+  // Follow the picker. Keyed on the scholarship rather than on the object, so
+  // a background refetch that returns an equal row does not discard an edit in
+  // progress — only actually changing which scholarship is being edited does.
+  useEffect(() => {
+    setDraft(live ?? null);
+    setReason("");
+  }, [live?.scholarshipId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * What the draft would do to the queue as it stands.
@@ -154,7 +192,7 @@ function CriteriaPage() {
     );
 
   const save = () => {
-    updateCriteria("sch-need", draft, reason.trim());
+    updateCriteria(live.scholarshipId, draft, reason.trim());
     toast.success("Criteria saved. The review queue has been re-sorted against them.");
     setReason("");
   };
@@ -164,10 +202,30 @@ function CriteriaPage() {
       <PageHeader
         back={{ to: "/applications", label: "Review applications" }}
         title="Eligibility criteria"
-        subtitle="The rules the system applies to every need-based application before a person reads it. Change a number here and the review queue re-sorts immediately."
+        subtitle={`The rules the system applies to every ${nameOf(live.scholarshipId)} application before a person reads it. Change a number here and the review queue re-sorts immediately.`}
       />
 
       <div className="max-w-5xl space-y-6 px-6 py-6 lg:px-8">
+        {criteria.length > 1 && (
+          <div className="flex items-center gap-3">
+            <Label htmlFor="criteria-scholarship" className="shrink-0">
+              Scholarship
+            </Label>
+            <Select value={live.scholarshipId} onValueChange={(value) => setEditing(value)}>
+              <SelectTrigger id="criteria-scholarship" className="max-w-md">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {criteria.map((c) => (
+                  <SelectItem key={c.scholarshipId} value={c.scholarshipId}>
+                    {nameOf(c.scholarshipId)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         <HowTo
           id="criteria"
           intro="These criteria decide which applications the committee never has to read. They are policy, so they live here rather than in the code."
@@ -194,8 +252,8 @@ function CriteriaPage() {
 
         {!mayEdit ? (
           <Callout tone="amber" title="You are signed in as a role that cannot change these">
-            {role} can read the criteria but not edit them. Switch to the Registrar Office or Admin
-            in the top bar.
+            {role} can read the criteria but not edit them. An Admin or Super Admin account is
+            needed to change them.
           </Callout>
         ) : null}
 

@@ -11,6 +11,32 @@ import type {
 import type { DomainEvent } from "./events";
 
 /**
+ * Demo data, and the constants it is built from.
+ *
+ * **No screen reads this any more.** The application loads its scholarships,
+ * students, awards and lookups from Laravel — see `store.tsx` and
+ * `reference.ts`. Nothing here is on the path of a running page.
+ *
+ * It is kept, rather than deleted, for one stated reason. `DatabaseSeeder` in
+ * the API says the demo set "has to be generated the way seed.ts generates it",
+ * because no real student record may enter this repository: the 112 students
+ * below are built arithmetically — names from index arithmetic over two small
+ * arrays, phone numbers from a prime multiplication, email addresses from a
+ * formula — so there is no real person in the file and no export anyone could
+ * accidentally swap for one. That generator is the specification for the PHP
+ * demo seeder that has not been written yet.
+ *
+ * The reference lists here are therefore no longer a second copy the app can
+ * read, but they are still a second copy of what `ReferenceSeeder` inserts, and
+ * `ReferenceDataTest` still holds the two together. When the demo seeder lands
+ * in PHP, this file and that test go with it.
+ *
+ * The batch order moved out to `batch-order.ts`, which mirrors
+ * `App\Domain\Support\BatchOrder`. It is a domain constant rather than seed
+ * data, and the pure modules default to it.
+ */
+
+/**
  * Admission categories. A lookup, not a union type, because the registry adds
  * and retires quotas without anyone shipping code. The admin screen edits this
  * list; nothing in the app should test a quota by string equality.
@@ -578,7 +604,7 @@ export function seedApplications(students: Student[], awards: Award[]): NeedAppl
       decision = {
         outcome: "Approved",
         by: "Dr. Sana Yousaf",
-        role: "Scholarship Committee",
+        role: "Admin",
         at: "2025-07-30T11:20:00.000Z",
         reason: "Verified need, strong academic standing. Granted at the standard 50%.",
         awardedPct: 50,
@@ -588,7 +614,7 @@ export function seedApplications(students: Student[], awards: Award[]): NeedAppl
       decision = {
         outcome: "Rejected",
         by: "Dr. Sana Yousaf",
-        role: "Scholarship Committee",
+        role: "Admin",
         at: "2025-07-30T11:35:00.000Z",
         reason: "Declared income could not be reconciled with the supporting documents.",
       };
@@ -596,8 +622,8 @@ export function seedApplications(students: Student[], awards: Award[]): NeedAppl
       status = "On hold";
       decision = {
         outcome: "On hold",
-        by: "Registrar Office",
-        role: "Registrar Office",
+        by: "Kamran Sheikh",
+        role: "Admin",
         at: "2025-07-29T15:05:00.000Z",
         reason: "Waiting on an attested income certificate from the student.",
       };

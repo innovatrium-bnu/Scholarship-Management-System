@@ -17,7 +17,7 @@
  * Every field here is machine-readable, and `semester` is resolved once at
  * write time rather than derived from a date at read time by whoever is asking.
  *
- * This is also the table the PostgreSQL backend will want, more or less as-is.
+ * This is also the table the Oracle backend will want, more or less as-is.
  */
 import type { RevocationCause } from "./types";
 

@@ -1,7 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
-import { nitro } from "nitro/vite";
-import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import tsConfigPaths from "vite-tsconfig-paths";
@@ -9,58 +8,27 @@ import tsConfigPaths from "vite-tsconfig-paths";
 /**
  * Build config for the BNU Scholarship Management System.
  *
- * This was previously delegated to `@lovable.dev/vite-tanstack-config`. It is
- * spelled out here instead so the university owns its own build: nothing in the
- * production pipeline depends on a third-party wrapper that could change or
- * stop being published.
+ * This builds a single-page app. It previously used TanStack Start, which
+ * rendered on the server and shipped its own Nitro Node process; now that
+ * Laravel serves the API there is no reason to run a second backend, so Start
+ * and Nitro are gone and `vite build` emits plain static assets to dist/.
  *
- * Plugin order is deliberate and matches what the wrapper did — tailwind and
- * path resolution first, then TanStack Start, then the Nitro server build, with
- * the React plugin last.
+ * What did not change: the routes themselves. They are still TanStack Router
+ * file routes under src/routes with the same flat naming, and
+ * src/routeTree.gen.ts is still generated from them — by the router plugin
+ * directly rather than by Start wrapping it.
+ *
+ * Plugin order is deliberate: tailwind and path resolution first, the route
+ * generator before anything compiles JSX, and the React plugin last.
  */
-/**
- * Which server Nitro should build for.
- *
- * The university runs this on its own hardware, so `node-server` — a plain
- * Node app started with `node .output/server/index.mjs` — is the real target
- * and stays the default everywhere.
- *
- * Vercel hosts the demo. Its build environment sets `VERCEL=1` itself, which
- * is the whole trigger: nobody has to remember to pass a flag, and a local
- * build cannot accidentally produce Vercel output. `NITRO_PRESET` overrides
- * both if you want to test the other one by hand.
- */
-function resolvePreset(): string {
-  if (process.env.NITRO_PRESET) return process.env.NITRO_PRESET;
-  return process.env.VERCEL ? "vercel" : "node-server";
-}
-
 export default defineConfig(({ command, mode }) => {
-  const isBuild = command === "build";
-  const isDevBuild = isBuild && mode === "development";
-  const preset = resolvePreset();
+  const isDevBuild = command === "build" && mode === "development";
 
   return {
     plugins: [
       tailwindcss(),
       tsConfigPaths({ projects: ["./tsconfig.json"] }),
-      tanstackStart({
-        // Route the bundled server entry through src/server.ts, our SSR error wrapper.
-        server: { entry: "server" },
-        // Stop server-only modules being pulled into the client bundle. Once the
-        // database lands, this is what keeps connection strings out of the browser.
-        importProtection: {
-          behavior: "error",
-          client: {
-            files: ["**/server/**"],
-            specifiers: ["server-only"],
-          },
-        },
-      }),
-      // Nitro produces the deployable server, so it is only needed on build.
-      // `node-server` emits .output/ for the BNU server; `vercel` emits
-      // .vercel/output/ for the demo. See resolvePreset above.
-      ...(isBuild ? [nitro({ preset })] : []),
+      tanstackRouter({ target: "react", autoCodeSplitting: true }),
       viteReact(),
     ],
 
@@ -69,13 +37,12 @@ export default defineConfig(({ command, mode }) => {
     // Running Lightning CSS in both keeps the preview honest.
     css: { transformer: "lightningcss" },
 
-    // Client-scoped so React DevTools gets the dev react-dom; a global NODE_ENV
-    // flip would emit jsxDEV, which the react-server SSR runtime can't resolve.
+    // `build:dev` produces a debuggable bundle: React DevTools needs the
+    // development react-dom, and readable names make a stack trace from the BNU
+    // staging box worth reading.
     ...(isDevBuild
       ? {
-          environments: {
-            client: { define: { "process.env.NODE_ENV": JSON.stringify("development") } },
-          },
+          define: { "process.env.NODE_ENV": JSON.stringify("development") },
           esbuild: { keepNames: true },
         }
       : {}),
@@ -84,7 +51,7 @@ export default defineConfig(({ command, mode }) => {
       // fileURLToPath, not URL.pathname — the latter percent-encodes spaces and
       // keeps a leading slash before the drive letter, which Windows cannot resolve.
       alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
-      // A second copy of React or Query breaks hooks and hydration.
+      // A second copy of React or Query breaks hooks and cached state.
       dedupe: [
         "react",
         "react-dom",
@@ -97,8 +64,6 @@ export default defineConfig(({ command, mode }) => {
 
     // Dep re-optimization rotates the optimized-dep hash and 504s tabs holding the
     // old one; pre-bundle the always-present client deps and tolerate stale requests.
-    // React core only — including @tanstack/react-start would pull its node:async_hooks
-    // server entry into the client bundle and crash hydration.
     optimizeDeps: {
       include: [
         "react",
@@ -110,6 +75,32 @@ export default defineConfig(({ command, mode }) => {
       ignoreOutdatedRequests: true,
     },
 
-    server: { host: "::", port: 8080 },
+    /*
+     * The dev server proxies the API instead of calling it cross-origin.
+     *
+     * Authentication is a session cookie, and a cookie is only simple while
+     * everything is one origin. In production it already is: nginx serves /api
+     * from Laravel and everything else from dist/. In development the SPA runs
+     * here on 8080 and Laravel answers on 8000, which without this is two
+     * origins — meaning CORS, `credentials: "include"` on every fetch, and a
+     * SameSite policy loose enough to let the cookie travel.
+     *
+     * Proxying makes the browser see one origin again, so the dev setup matches
+     * the deployed one rather than needing its own security posture. The app
+     * calls /api/... relative, in both.
+     *
+     * changeOrigin stays off deliberately: rewriting the Host header to
+     * localhost:8000 would have Laravel issue the session cookie for a domain
+     * the browser is not on, and it would be dropped.
+     */
+    server: {
+      host: "::",
+      port: 8080,
+      proxy: {
+        "/api": { target: "http://localhost:8000", changeOrigin: false },
+        // Sanctum's CSRF cookie endpoint sits outside /api.
+        "/sanctum": { target: "http://localhost:8000", changeOrigin: false },
+      },
+    },
   };
 });

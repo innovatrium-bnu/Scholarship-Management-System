@@ -1,4 +1,4 @@
-import { BATCHES } from "@/lib/scholarship/seed";
+import { BATCHES } from "@/lib/scholarship/batch-order";
 import type { BatchMode } from "@/lib/scholarship/types";
 
 /**

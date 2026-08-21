@@ -12,7 +12,7 @@
  * that verdict stays an explicit action someone takes in the UI. A student is
  * never turned down by a function running quietly in a `useMemo`.
  */
-import { BATCHES } from "./seed";
+import { BATCHES } from "./batch-order";
 import type {
   CgpaThreshold,
   CriterionId,

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type {
   Rule,
   Scholarship,
@@ -21,13 +21,11 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Trash2, Plus, Check, AlertCircle, ArrowLeft, ArrowRight } from "lucide-react";
-import { SCHOOLS, BATCHES, SEMESTERS, PROGRAMMES } from "@/lib/scholarship/seed";
+import { useReference } from "@/lib/scholarship/reference";
 import { useStore } from "@/lib/scholarship/store";
 import { shortSchool, resolveBatches, batchRuleSentence } from "./helpers";
 import { Callout, HelpTip, StatusPill } from "./ui-kit";
 import { StepNumber } from "./guidance";
-
-const ALL_PROGRAMMES = Array.from(new Set(Object.values(PROGRAMMES).flat()));
 
 /**
  * Five steps, each answering one question in the order a person would ask it.
@@ -97,6 +95,22 @@ export function ScholarshipForm({
   onCancel: () => void;
 }) {
   const { feeHeads, addFeeHead } = useStore();
+  // Destructured under the old constant names so the uses below read as they
+  // did when these were hardcoded arrays in seed.ts. They are tables now.
+  const {
+    schools: SCHOOLS,
+    batches: BATCHES,
+    semesters: SEMESTERS,
+    programmes: PROGRAMMES,
+  } = useReference();
+
+  // Was a module-level constant, which it could be while PROGRAMMES was a
+  // hardcoded object. It is loaded now, so it is derived per render instead --
+  // memoised because the flatten runs over every programme in the university.
+  const ALL_PROGRAMMES = useMemo(
+    () => Array.from(new Set(Object.values(PROGRAMMES).flat())),
+    [PROGRAMMES],
+  );
   const [step, setStep] = useState<StepKey>("Basics");
   const [reason, setReason] = useState("");
   const [data, setData] = useState<Scholarship>(
@@ -899,7 +913,7 @@ function BatchCriteria({
   list: string[];
   onChange: (mode: BatchMode, from: string | undefined, list: string[]) => void;
 }) {
-  const allBatches = BATCHES as unknown as string[];
+  const { batches: allBatches } = useReference();
   const fallbackFrom = from ?? allBatches[allBatches.length - 1]!;
 
   const options: { value: BatchMode; title: string; subtitle: string }[] = [

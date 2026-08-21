@@ -395,8 +395,8 @@ function ApplicationDetail() {
               </div>
             ) : !decided ? (
               <Callout tone="neutral" title="You are signed in as a role that cannot decide">
-                {role} can read applications but not rule on them. Switch to the Scholarship
-                Committee or the Registrar Office in the top bar.
+                {role} can read applications but not rule on them. An Admin or Super Admin account
+                is needed to approve, reject, or hold one.
               </Callout>
             ) : null}
 

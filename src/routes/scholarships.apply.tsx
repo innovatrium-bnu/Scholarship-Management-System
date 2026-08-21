@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { RequiresCapability } from "@/components/scholarship/RequiresCapability";
 import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/scholarship/AppShell";
 import { useStore } from "@/lib/scholarship/store";
@@ -9,7 +10,7 @@ import { HowTo, StepHeading } from "@/components/scholarship/guidance";
 import { Info } from "lucide-react";
 
 export const Route = createFileRoute("/scholarships/apply")({
-  component: ApplyScholarshipsPage,
+  component: GuardedApplyScholarshipsPage,
   head: () => ({
     meta: [
       { title: "Give a scholarship to students | BNU Scholarships" },
@@ -102,5 +103,20 @@ function ApplyScholarshipsPage() {
 
       {dialogs}
     </>
+  );
+}
+
+/**
+ * The permission boundary for this screen, applied before it renders.
+ *
+ * The sidebar hides this destination from roles that cannot use it, but a
+ * URL is reachable regardless of what the menu shows. See
+ * RequiresCapability for why the message arrives here rather than at save.
+ */
+function GuardedApplyScholarshipsPage() {
+  return (
+    <RequiresCapability needs="awards.manage" what="give a scholarship to students">
+      <ApplyScholarshipsPage />
+    </RequiresCapability>
   );
 }

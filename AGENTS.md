@@ -28,6 +28,40 @@ resolved it in two places, so the ceiling check used the chosen rate while the
 "afterwards" column still showed the scholarship's — the two disagreed on screen
 and nothing caught it.
 
+**1b. The same logic now exists twice, and both copies must agree.**
+
+Each of those modules — plus [`aggregate.ts`](src/lib/scholarship/aggregate.ts)
+— has a PHP counterpart in [`api/app/Domain/`](api/app/Domain/). Laravel is
+authoritative: it recomputes every figure on write, and a client-supplied amount
+is input, never authority. The TypeScript copies stay because the browser draws
+coverage bars and ceiling warnings without a round trip.
+
+| TypeScript | PHP |
+| ---------- | --- |
+| `merge.ts` | `MergeService` |
+| `evaluate.ts` | `EvaluationService` |
+| `rates.ts` | `RatePlanService` |
+| `screening.ts` | `ScreeningService` |
+| `aggregate.ts` | `ReportService` |
+
+**Change one, change the other, and change both test suites.** Every one of the
+132 Vitest cases in those five modules is mirrored in Pest under
+[`api/tests/Unit/`](api/tests/Unit/), keeping the original test names so a
+failure points at its counterpart. If the two implementations drift, a registrar
+sees one number on screen and the invoice says another.
+
+Two things make the PHP port reproduce the TypeScript exactly, and both look
+like mistakes if you do not know why:
+
+- **Floats, not BCMath.** Every number in TypeScript is an IEEE-754 double and
+  so is a PHP float. Decimal arithmetic here would be arguably more correct and
+  demonstrably different, which is the one outcome that cannot be allowed. The
+  database columns are `decimal`; the services are not.
+- **[`JsNumber::text()`](api/app/Domain/Support/JsNumber.php) instead of a
+  string cast.** Reason strings are compared character for character, and PHP's
+  float-to-string honours the `precision` ini setting while JavaScript always
+  emits the shortest round-tripping form.
+
 **1a. The criteria filter sorts; it never decides.**
 
 `screen()` returns a verdict and nothing else. Turning an application down is
@@ -103,9 +137,13 @@ though measured, which is why it is gone.
 
 - **npm only.** The lockfile is npm's and versions are pinned exactly. Do not
   introduce bun, pnpm, or yarn, and do not loosen pinned versions to ranges.
-- **Routes are files** in [`src/routes/`](src/routes/). This is TanStack Start,
+- **Routes are files** in [`src/routes/`](src/routes/). This is TanStack Router,
   not Next.js — no `src/pages/`, no `app/layout.tsx`. See
   [src/routes/README.md](src/routes/README.md) for the naming table.
+- **This is a SPA.** There is no server rendering and no Node process in
+  production. `src/main.tsx` mounts the router into `index.html`; the backend is
+  Laravel, reached over HTTP. Do not add server-side rendering or reintroduce
+  TanStack Start.
 - **`src/routeTree.gen.ts` is generated.** Never edit it by hand.
 - **`@/` resolves to `src/`.**
 - **Formatting**: Prettier — 100 columns, double quotes, semicolons, trailing
@@ -115,35 +153,61 @@ though measured, which is why it is gone.
 - **The build config is deliberately explicit.** [`vite.config.ts`](vite.config.ts)
   spells out every plugin rather than delegating to a wrapper package, so the
   university owns its own build. Keep it that way.
+- **The empty string does not exist in the database.** Oracle stores `''` as
+  NULL and cannot be configured otherwise, so this application never writes one.
+  Laravel's default `ConvertEmptyStringsToNull` middleware covers request input;
+  everything else — seeders, jobs, factories, plain assignment — is covered by
+  `App\Models\Concerns\NormalisesEmptyStrings`, which every model inherits from
+  `App\Models\Model` (`User` applies it by hand, since it must extend
+  `Authenticatable`). Two consequences when writing PHP: compare against `null`,
+  never `''`, and expect a NOT NULL column handed `''` to fail loudly with
+  ORA-01400 rather than store anything. The 19 nullable string columns are the
+  ones that would otherwise fail silently, because `where col = ''` matches no
+  row in Oracle — not even one you just wrote.
 
 ## Current state
 
-The frontend and domain logic are complete. **There is no backend.** All data
-lives in a React context seeded from
-[`seed.ts`](src/lib/scholarship/seed.ts) and is regenerated on every page
-refresh — nothing persists.
+The system is complete end to end. **There is a backend**: a Laravel API on
+Oracle in [`api/`](api/), and the SPA talks to it.
+[`store.tsx`](src/lib/scholarship/store.tsx) is TanStack Query over `fetch`
+rather than a React context, so data persists across a refresh, and every screen
+sits behind a session the server enforces.
 
-The next major piece of work is a PostgreSQL backend, deployed on BNU servers.
-Zod and TanStack Query are already installed for that and currently unused.
+How the pieces fit:
 
-When that lands, watch for these, which are artefacts of the in-memory store:
+- **[`api/`](api/)** is Laravel on Oracle. `app/Domain/` holds the ported money
+  and eligibility services and is **pure** — no Eloquent, no queries, enforced
+  by `DomainPurityTest`. `app/Persistence/` loads rows, maps them to those
+  services and writes results. `app/Http/` is thin controllers over that.
+- **[`src/`](src/)** is the SPA. `store.tsx` is the only thing that talks to the
+  API; screens read it exactly as they read the old in-memory context.
+- **The pure domain modules exist in both languages on purpose.** The browser
+  runs the TypeScript copy to draw coverage bars and ceiling warnings without a
+  round trip; Laravel is authoritative on every write. They are
+  transliterations of each other and the two test suites mirror case for case.
 
-- IDs are generated client-side (`aw-${Date.now()}`, `au-${audit.length + 1}`)
-  and must become database-generated. The audit one collides after an undo.
-- Precedence needs to become an explicit integer column, not array position.
-- Batch assign and undo must become a single database transaction.
-- Approving an application creates its award in the same state update. That has
-  to stay atomic in SQL too, or a student ends up approved but holding nothing.
-- The audit actor is whichever `Role` is picked in the top bar. There is no
-  authentication: [`roles.ts`](src/lib/scholarship/roles.ts) describes what each
-  role may do but cannot enforce it. When auth lands, `can()` should read the
-  session instead of the picked role, and the screens need no change.
-- `evaluate()`, `computeMerge()` and `screen()` take whole collections in
-  memory. Load the working set in bulk queries and keep these functions pure —
-  do not make them query per student, or the dashboard becomes an N+1 disaster
-  at 5,000 students. `useScreenedApplications()` runs `computeMerge` once per
-  application and is the first thing that will need batching.
-- Documents on an application are metadata only; there is no file storage yet.
+Everything the in-memory store used to fudge is now real, and each of these is
+worth knowing because the reasoning is still load-bearing:
+
+- **IDs come from the database.** ULIDs, not `aw-${Date.now()}`. The audit one
+  used to collide after an undo.
+- **Precedence is an integer column** with a `DEFERRABLE INITIALLY DEFERRED`
+  unique constraint, so a reorder can pass through a duplicate state inside its
+  transaction. Any endpoint returning scholarships orders by it, because the
+  browser runs its own merge and takes the order it is given.
+- **Batch assign/undo and approve-creates-award are single transactions.**
+- **`roles.ts` is enforced.** `App\Auth\RoleMatrix` mirrors it capability for
+  capability and is registered as gates; `RoleMatrixTest` parses `roles.ts` and
+  fails if they drift. The audit actor is the signed-in user, and the `X-Role`
+  header the SPA used to send is ignored.
+- **`evaluate()`, `computeMerge()` and `screen()` still take whole collections
+  in memory, and must keep doing so.** The persistence layer loads the working
+  set in bulk — `AwardRepository::activeForStudents`, `ApplicationScreener` at
+  four queries for the whole queue — precisely so these stay pure. Do not push a
+  query into them.
+- **Documents on an application are still metadata only**; there is no file
+  storage, and the storage column is absent rather than nullable so nothing
+  half-works.
 
 ## Not built yet
 

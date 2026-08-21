@@ -1,5 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
+import { useStore } from "@/lib/scholarship/store";
+import { can } from "@/lib/scholarship/roles";
 import {
   Table,
   TableBody,
@@ -80,6 +82,21 @@ export function ScholarshipsTable({
   onRestore?: (s: ScholarshipRow) => void;
   emptyMessage?: string;
 }) {
+  /*
+   * What this role may actually do, asked of the same matrix the server gates
+   * on.
+   *
+   * Every control below used to render for everybody. Reporting holds only
+   * applications.read, so a reporting user saw Change, Retire it, Make a copy
+   * and Give to students, pressed one, and got a 403 the screen turned into a
+   * failed save with no explanation of why. A screen offering an action the
+   * API refuses is the same defect as one hiding an action the API allows —
+   * both leave the user unable to tell what they are entitled to.
+   */
+  const { role } = useStore();
+  const mayEdit = can(role, "scholarships.edit");
+  const mayAward = can(role, "awards.manage");
+
   if (rows.length === 0) {
     return (
       <div className="surface-card">
@@ -178,7 +195,7 @@ export function ScholarshipsTable({
                 </TableCell>
                 <TableCell className="pr-5">
                   <div className="flex items-center justify-end gap-2">
-                    {mode === "update" && (
+                    {mode === "update" && mayEdit && (
                       <Button
                         variant="outline"
                         className="h-9 rounded-lg"
@@ -187,7 +204,7 @@ export function ScholarshipsTable({
                         <Pencil className="h-4 w-4" /> Change
                       </Button>
                     )}
-                    {mode === "apply" && (
+                    {mode === "apply" && mayAward && (
                       <Button className="h-9 rounded-lg" asChild>
                         <Link
                           to="/assign/$scholarshipId"
@@ -198,7 +215,7 @@ export function ScholarshipsTable({
                         </Link>
                       </Button>
                     )}
-                    {mode === "archive" && onRestore && (
+                    {mode === "archive" && onRestore && mayEdit && (
                       <Button
                         variant="outline"
                         className="h-9 rounded-lg"
@@ -219,7 +236,7 @@ export function ScholarshipsTable({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-56 rounded-xl">
-                        {mode !== "apply" && (
+                        {mode !== "apply" && mayAward && (
                           <DropdownMenuItem asChild>
                             <Link
                               to="/assign/$scholarshipId"
@@ -230,18 +247,23 @@ export function ScholarshipsTable({
                             </Link>
                           </DropdownMenuItem>
                         )}
-                        {mode !== "update" && (
+                        {mode !== "update" && mayEdit && (
                           <DropdownMenuItem onClick={() => onEdit(s)}>
                             <Pencil className="h-4 w-4" /> Change the rules
                           </DropdownMenuItem>
                         )}
+                        {/* Reading the history needs no capability: every role
+                            holds applications.read and the audit endpoint is
+                            gated on authentication alone. */}
                         <DropdownMenuItem onClick={() => onAudit(s)}>
                           <History className="h-4 w-4" /> See what changed
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onDuplicate(s)}>
-                          <Copy className="h-4 w-4" /> Make a copy
-                        </DropdownMenuItem>
-                        {mode !== "archive" && (
+                        {mayEdit && (
+                          <DropdownMenuItem onClick={() => onDuplicate(s)}>
+                            <Copy className="h-4 w-4" /> Make a copy
+                          </DropdownMenuItem>
+                        )}
+                        {mode !== "archive" && mayEdit && (
                           <DropdownMenuItem onClick={() => onArchive(s)}>
                             <Archive className="h-4 w-4" /> Retire it
                           </DropdownMenuItem>

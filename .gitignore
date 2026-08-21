@@ -33,3 +33,82 @@ dist-ssr
 
 .vercel
 .env*
+# .env.example carries no real values and is meant to be committed. The
+# negation has to come after the pattern it undoes, or it has no effect.
+!.env.example
+
+# =============================================================================
+# Student data and secrets
+#
+# This application handles student scholarship records. Nothing below has any
+# legitimate reason to exist in this repository, and the cost of getting it
+# wrong is not symmetric: once a real student record is committed it is in
+# every clone anybody ever made, and removing it means rewriting history and
+# asking every developer to re-clone.
+#
+# The pre-commit hook in .githooks/ is the second layer. Install it with
+# scripts/install-hooks.sh. This file is the first layer and needs no setup.
+# =============================================================================
+
+# --- Databases, dumps, and exports -------------------------------------------
+# The Oracle backend described in README.md under Status will bring migrations
+# and possibly dumps taken while debugging. Migrations belong in git. Dumps of a
+# real database never do.
+*.sql
+*.sql.gz
+*.dump
+*.pgdump
+*.sqlite
+*.sqlite3
+*.db
+*.bak
+
+# --- Spreadsheets and flat exports -------------------------------------------
+# The usual shape of a real student list handed over by the Registrar Office.
+# If you need synthetic fixtures, generate them in TypeScript the way
+# src/lib/scholarship/seed.ts already does.
+*.csv
+*.tsv
+*.xls
+*.xlsx
+*.ods
+
+# --- Keys and certificates ---------------------------------------------------
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.kdbx
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+
+# --- Forge backups -----------------------------------------------------------
+# Backups of the Forgejo instance that hosts this repository. They contain user
+# accounts and password hashes. They live in the bnu-forgejo repository's
+# backups/ directory, never here.
+forgejo-backup-*.tar.gz
+
+# =============================================================================
+# Stray files
+#
+# These are untracked working-tree files that are not part of the project.
+# Ignored so they cannot be committed by an absent-minded `git add .`.
+# Deleting them is better than ignoring them, but that is the author's call.
+# =============================================================================
+
+# Third-party UI mockups carrying a visible stock-image watermark, referenced
+# nowhere in the code. Anything under public/ is served publicly by the app, so
+# committing these would ship watermarked stock art to production.
+public/modification/
+
+# A phone photo of a handwritten note, unrelated to this project, sitting in the
+# shadcn component directory by accident.
+src/components/ui/WhatsApp Image *.jpeg
+
+# Laravel runtime. The API's own .gitignore covers vendor/ and storage/;
+# these are the paths that only exist once Docker has run.
+/api/.env
+/api/.phpunit.cache

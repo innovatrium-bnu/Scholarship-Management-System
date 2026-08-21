@@ -1,16 +1,17 @@
 /**
  * What each role is allowed to do.
  *
- * There is no authentication yet, so this cannot keep anyone out — a
- * determined user can switch role in the top bar. It exists so the screens
- * are built against a real permission model from the start: when auth lands,
- * `can()` starts reading a session instead of a picked role, and no screen
- * has to change.
+ * The four roles are the ones BNU asked for, and they are graded by how much
+ * damage a mistake does rather than by which office someone sits in. Reporting
+ * can only look; Data Entry can correct a record but cannot decide who gets
+ * money; Admin runs the scholarship cycle; Super Admin also administers the
+ * system itself. More will be added as the university names them — nothing
+ * here assumes there are exactly four.
  *
- * The split follows the office rather than the software. The Registrar Office
- * owns student data and awards; the Scholarship Committee judges applications
- * but must not be able to edit the CGPA it is judging against; Finance reads
- * everything and changes nothing.
+ * This is the display half of the model. `App\Auth\RoleMatrix` is the enforcing
+ * half, and `RoleMatrixTest` parses this file and fails if the two disagree.
+ * The duplication is deliberate: serving the matrix from the API would mean the
+ * server asking the client what the client is allowed to do.
  */
 import type { Role } from "./types";
 
@@ -26,19 +27,29 @@ export type Capability =
   /** Award or take back a scholarship by hand. */
   | "awards.manage"
   /** Create, change, or retire a scholarship. */
-  | "scholarships.edit";
+  | "scholarships.edit"
+  /**
+   * Create accounts and set what role they hold.
+   *
+   * The one capability no screen draws yet — there is no user administration
+   * page and no endpoint behind it. It is declared because it is the whole
+   * difference between Super Admin and Admin, and because a capability that
+   * exists in the matrix is enforced the moment a route names it. Declaring it
+   * now is what stops the first user-management endpoint from being written
+   * with no gate at all.
+   */
+  | "users.manage";
 
 const MATRIX: Record<Role, Capability[]> = {
-  "Registrar Office": [
+  "Super Admin": [
     "applications.read",
     "applications.decide",
     "students.edit",
     "criteria.edit",
     "awards.manage",
     "scholarships.edit",
+    "users.manage",
   ],
-  "Scholarship Committee": ["applications.read", "applications.decide"],
-  Finance: ["applications.read"],
   Admin: [
     "applications.read",
     "applications.decide",
@@ -47,6 +58,14 @@ const MATRIX: Record<Role, Capability[]> = {
     "awards.manage",
     "scholarships.edit",
   ],
+  /* Data Entry keeps records straight and prepares applications for review. It
+     deliberately stops short of `applications.decide` and `awards.manage`:
+     entering the numbers a decision rests on and making the decision are the
+     two halves that have to stay in different hands. */
+  "Data Entry": ["applications.read", "students.edit"],
+  /* Reporting is read-only by construction. Every read route is gated on being
+     signed in, so this list is what it may do beyond looking. */
+  Reporting: ["applications.read"],
 };
 
 export function can(role: Role, capability: Capability): boolean {
@@ -55,16 +74,16 @@ export function can(role: Role, capability: Capability): boolean {
 
 /** One line describing the role, shown next to the switcher. */
 export const ROLE_BLURB: Record<Role, string> = {
-  "Registrar Office": "Owns student records, awards, and criteria",
-  "Scholarship Committee": "Judges applications, cannot edit student data",
-  Finance: "Read-only view of awards and coverage",
-  Admin: "Full access, including lookups and settings",
+  "Super Admin": "Full access, including accounts, lookups, and settings",
+  Admin: "Runs the scholarship cycle: scholarships, awards, criteria, decisions",
+  "Data Entry": "Enters and corrects student and application records",
+  Reporting: "Read-only. Reports, coverage, and the review queue",
 };
 
 /** Initials for the avatar in the top bar. */
 export const ROLE_INITIALS: Record<Role, string> = {
-  "Registrar Office": "RO",
-  "Scholarship Committee": "SC",
-  Finance: "FI",
+  "Super Admin": "SA",
   Admin: "AD",
+  "Data Entry": "DE",
+  Reporting: "RP",
 };

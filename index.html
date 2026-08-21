@@ -1,0 +1,68 @@
+<!doctype html>
+<!--
+  SPA entry for the BNU Scholarship Management System.
+
+  This replaces the `shellComponent` that TanStack Start used to render on the
+  server. The document head was previously built by the router's `head()` in
+  src/routes/__root.tsx and injected by the HeadContent component; with no
+  server rendering the tags are static, so they live here where the browser can
+  act on the preconnects before any JavaScript runs.
+
+  Nothing that looks like an opening tag may appear in this comment, which is
+  why HeadContent is named above without its angle brackets.
+
+  Vite locates the injection point for the dev server's script tags with a
+  case-insensitive pattern for the head element's opening tag. That pattern
+  matches the first five characters of HeadContent written as a tag, six lines
+  before it reaches the real head element below. The React refresh preamble
+  then lands inside this comment, where it cannot run, and the consequence is
+  specific and hard to trace: React never mounts, the page is blank, the
+  console is empty, and no source file is wrong. Production is unaffected
+  because the build injects differently -- so the symptom is a blank dev server
+  while `npm run build` works.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BNU Scholarships</title>
+    <meta
+      name="description"
+      content="Scholarship Management System &amp; Analytics for Beaconhouse National University (BNU)"
+    />
+    <meta name="author" content="BNU Registrar Office" />
+
+    <meta property="og:title" content="BNU Scholarships" />
+    <meta
+      property="og:description"
+      content="Scholarship Management System &amp; Analytics for Beaconhouse National University (BNU)"
+    />
+    <meta property="og:type" content="website" />
+    <meta
+      property="og:image"
+      content="https://storage.googleapis.com/gpt-engineer-file-uploads/w59mfHGFFAW2Mk7EydiVY3UerzQ2/social-images/social-1783935225123-BNU.webp"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="BNU Scholarships" />
+    <meta
+      name="twitter:description"
+      content="Scholarship Management System &amp; Analytics for Beaconhouse National University (BNU)"
+    />
+    <meta
+      name="twitter:image"
+      content="https://storage.googleapis.com/gpt-engineer-file-uploads/w59mfHGFFAW2Mk7EydiVY3UerzQ2/social-images/social-1783935225123-BNU.webp"
+    />
+
+    <link rel="icon" type="image/jpeg" href="/favicon.jpg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

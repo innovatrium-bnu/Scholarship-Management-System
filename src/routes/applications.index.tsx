@@ -22,7 +22,7 @@ import {
 } from "@/lib/scholarship/useApplications";
 import { minCgpaFor } from "@/lib/scholarship/screening";
 import { can } from "@/lib/scholarship/roles";
-import { SCHOOLS, BATCHES } from "@/lib/scholarship/seed";
+import { useReference } from "@/lib/scholarship/reference";
 import { pkr, shortSchool, timeAgo } from "@/components/scholarship/helpers";
 import { ApplicationStatusPill, VerdictPill } from "@/components/scholarship/applications";
 import {
@@ -99,6 +99,9 @@ function pileOf(s: ScreenedApplication): Pile {
 
 function ApplicationsPage() {
   const { role, rejectApplications, criteria } = useStore();
+  // Destructured under the old constant names so the uses below read as they
+  // did when these were hardcoded arrays in seed.ts. They are tables now.
+  const { schools: SCHOOLS, batches: BATCHES } = useReference();
   const screened = useScreenedApplications();
   const nav = useNavigate();
 
@@ -111,7 +114,21 @@ function ApplicationsPage() {
   const [bulkNote, setBulkNote] = useState("");
 
   const mayDecide = can(role, "applications.decide");
-  const rules = criteria.find((c) => c.scholarshipId === "sch-need");
+
+  /*
+   * Criteria are held per scholarship, so a row's thresholds come from the
+   * scholarship its own application was filed against.
+   *
+   * This used to be a single lookup for `"sch-need"`, a slug from seed.ts that
+   * no live scholarship carries — every one is issued a real ULID by the
+   * database. The lookup matched nothing, so `minCgpa` and `requiredDocs`
+   * rendered blank on every row of the queue, and would have kept rendering
+   * blank if a second need-based scholarship were ever added.
+   */
+  const rulesFor = useMemo(() => {
+    const byScholarship = new Map(criteria.map((c) => [c.scholarshipId, c]));
+    return (scholarshipId: string) => byScholarship.get(scholarshipId);
+  }, [criteria]);
 
   const counts = useMemo(() => {
     const c: Record<Pile, number> = { review: 0, failing: 0, hold: 0, decided: 0 };
@@ -477,26 +494,30 @@ function ApplicationsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows.map((s) => (
-                    <Row
-                      key={s.app.id}
-                      s={s}
-                      pile={pile}
-                      selectable={pile === "failing" && mayDecide}
-                      picked={picked.has(s.app.id)}
-                      onPick={(on) =>
-                        setPicked((prev) => {
-                          const next = new Set(prev);
-                          if (on) next.add(s.app.id);
-                          else next.delete(s.app.id);
-                          return next;
-                        })
-                      }
-                      onOpen={() => nav({ to: "/applications/$id", params: { id: s.app.id } })}
-                      minCgpa={rules ? minCgpaFor(s.student.batch, rules.cgpaThresholds) : null}
-                      requiredDocs={rules?.requiredDocuments.length ?? 0}
-                    />
-                  ))}
+                  {rows.map((s) => {
+                    const rules = rulesFor(s.app.scholarshipId);
+
+                    return (
+                      <Row
+                        key={s.app.id}
+                        s={s}
+                        pile={pile}
+                        selectable={pile === "failing" && mayDecide}
+                        picked={picked.has(s.app.id)}
+                        onPick={(on) =>
+                          setPicked((prev) => {
+                            const next = new Set(prev);
+                            if (on) next.add(s.app.id);
+                            else next.delete(s.app.id);
+                            return next;
+                          })
+                        }
+                        onOpen={() => nav({ to: "/applications/$id", params: { id: s.app.id } })}
+                        minCgpa={rules ? minCgpaFor(s.student.batch, rules.cgpaThresholds) : null}
+                        requiredDocs={rules?.requiredDocuments.length ?? 0}
+                      />
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

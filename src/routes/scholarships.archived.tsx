@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { RequiresCapability } from "@/components/scholarship/RequiresCapability";
 import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/scholarship/AppShell";
 import { useStore } from "@/lib/scholarship/store";
@@ -23,7 +24,7 @@ import { toast } from "sonner";
 import type { Scholarship } from "@/lib/scholarship/types";
 
 export const Route = createFileRoute("/scholarships/archived")({
-  component: ArchivedScholarshipsPage,
+  component: GuardedArchivedScholarshipsPage,
   head: () => ({
     meta: [
       { title: "Retired scholarships | BNU Scholarships" },
@@ -187,5 +188,20 @@ function ArchivedScholarshipsPage() {
 
       {dialogs}
     </>
+  );
+}
+
+/**
+ * The permission boundary for this screen, applied before it renders.
+ *
+ * The sidebar hides this destination from roles that cannot use it, but a
+ * URL is reachable regardless of what the menu shows. See
+ * RequiresCapability for why the message arrives here rather than at save.
+ */
+function GuardedArchivedScholarshipsPage() {
+  return (
+    <RequiresCapability needs="scholarships.edit" what="retire or restore a scholarship">
+      <ArchivedScholarshipsPage />
+    </RequiresCapability>
   );
 }

@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { SCHOOLS, BATCHES } from "@/lib/scholarship/seed";
+import { useReference } from "@/lib/scholarship/reference";
 import { shortSchool } from "@/components/scholarship/helpers";
 import {
   SearchField,
@@ -127,6 +127,9 @@ export const Route = createFileRoute("/students/")({
 
 function StudentsPage() {
   const { students, awards, scholarships, role } = useStore();
+  // Destructured under the old constant names so the uses below read as they
+  // did when these were hardcoded arrays in seed.ts. They are tables now.
+  const { schools: SCHOOLS, batches: BATCHES } = useReference();
   const search = useSearch({ from: "/students/" });
   const [q, setQ] = useState("");
   const [who, setWho] = useState<"all" | "scholars">(search.scholarshipId ? "scholars" : "all");
