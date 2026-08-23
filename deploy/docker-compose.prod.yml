@@ -1,0 +1,77 @@
+# Production overlay for the Lightsail server.
+#
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml up -d
+#
+# Three things this changes about the base file, and why each matters more here
+# than it does on a laptop.
+#
+# **The database image.** docker-compose.yml pins Oracle enterprise 19.3.0.0
+# because that is what BNU IT runs. That image cannot be pulled: it needs a
+# login to container-registry.oracle.com and the account has MFA, which
+# `docker login` has no way to present. XE 18c is the stand-in, and the
+# substitution is only safe in one direction — 18c is *older* than 19c, so DDL
+# 18c accepts, 19c accepts too. `server_version => '19c'` in
+# api/config/database.php independently keeps the grammar emitting 19c syntax
+# whatever the server actually is.
+#
+# **The data volume comes back.** docker-compose.verify.yml drops `db-data`
+# because that database is meant to be disposable. This one is not. Losing it
+# means losing every award, decision and audit entry made through the deployed
+# system, so the volume is declared explicitly here rather than inherited.
+#
+# **Oracle stops listening to the internet.** The base file publishes 1521 so a
+# GUI client on the host can inspect data. On a public IP that is an Oracle
+# listener anyone on the internet can reach. Nothing in the application needs
+# it — the API talks to `db` over the compose network — so the mapping is
+# removed and access happens through the SSH tunnel documented in the README.
+services:
+  db:
+    image: gvenzl/oracle-xe:18-slim
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD:?set ORACLE_PASSWORD in deploy/.env}
+    # The SGA lives in /dev/shm and Docker's 64 MB default surfaces as ORA-00845.
+    # 1 GB is enough for XE, where enterprise wants 2.
+    shm_size: 1gb
+    # !override replaces the base list rather than merging into it, so the
+    # init script path is the gvenzl one and not Oracle's own.
+    volumes: !override
+      - db-data:/opt/oracle/oradata
+      - ../docker/db-init-xe.sql:/container-entrypoint-initdb.d/10-app-user.sql:ro
+    # Not published. See the note above.
+    ports: !override []
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 5m
+    restart: unless-stopped
+    # On a 2 GB box Oracle will take everything it is allowed to. Capping it
+    # leaves room for php-fpm and nginx to answer while the database is busy.
+    mem_limit: 1200m
+
+  api:
+    volumes: !override
+      - ../api:/var/www/api
+      - api-vendor:/var/www/api/vendor
+      - api-storage:/var/www/api/storage
+      - api-cache:/var/www/api/bootstrap/cache
+      - ../src:/var/www/src:ro
+    restart: unless-stopped
+    mem_limit: 400m
+
+  web:
+    ports: !override
+      - "80:80"
+    volumes: !override
+      - ../docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../api/public:/var/www/api/public:ro
+      - ../dist:/var/www/dist:ro
+    restart: unless-stopped
+    mem_limit: 128m
+
+volumes:
+  db-data:
+  api-vendor:
+  api-storage:
+  api-cache:
