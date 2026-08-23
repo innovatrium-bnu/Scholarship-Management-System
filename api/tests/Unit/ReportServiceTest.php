@@ -110,6 +110,57 @@ describe('awardsRevokedBetween — counts when the award ended, not when it bega
     });
 });
 
+describe('everHeldRegNos — who has ever held it, not who holds it now', function () {
+    it('includes a student whose award has since been revoked', function () {
+        $events = [
+            granted(['awardId' => 'aw-1', 'studentRegNo' => 'F23-0001', 'scholarshipId' => 'sch-a']),
+            revoked(['awardId' => 'aw-1', 'studentRegNo' => 'F23-0001', 'scholarshipId' => 'sch-a']),
+        ];
+
+        expect($this->reports->everHeldRegNos($events, 'sch-a'))->toBe(['F23-0001']);
+    });
+
+    it('counts a student once however many awards of it they have held', function () {
+        $events = [
+            granted(['awardId' => 'aw-1', 'studentRegNo' => 'F23-0001', 'scholarshipId' => 'sch-a']),
+            revoked(['awardId' => 'aw-1', 'studentRegNo' => 'F23-0001', 'scholarshipId' => 'sch-a']),
+            granted(['awardId' => 'aw-2', 'studentRegNo' => 'F23-0001', 'scholarshipId' => 'sch-a']),
+        ];
+
+        expect($this->reports->everHeldRegNos($events, 'sch-a'))->toHaveCount(1);
+    });
+
+    it('ignores other scholarships', function () {
+        $events = [
+            granted(['awardId' => 'aw-1', 'studentRegNo' => 'F23-0001', 'scholarshipId' => 'sch-a']),
+            granted(['awardId' => 'aw-2', 'studentRegNo' => 'F23-0002', 'scholarshipId' => 'sch-b']),
+        ];
+
+        expect($this->reports->everHeldRegNos($events, 'sch-a'))->toBe(['F23-0001']);
+    });
+
+    it('excludes an award whose batch was undone, because it was never really held', function () {
+        $events = [
+            granted(['awardId' => 'aw-1', 'studentRegNo' => 'F23-0001', 'scholarshipId' => 'sch-a']),
+            new DomainEvent(
+                kind: DomainEvent::AWARD_UNDONE,
+                at: '2025-09-02T10:00:00.000Z',
+                actor: 'Registrar Office',
+                awardId: 'aw-1',
+                studentRegNo: 'F23-0001',
+                scholarshipId: 'sch-a',
+                batchId: 'bat-1',
+            ),
+        ];
+
+        expect($this->reports->everHeldRegNos($events, 'sch-a'))->toBe([]);
+    });
+
+    it('is empty for a scholarship nobody has ever been granted', function () {
+        expect($this->reports->everHeldRegNos([], 'sch-a'))->toBe([]);
+    });
+});
+
 describe('scholarsByIntakeYear — a year holds both its intakes', function () {
     /**
      * The bug this replaces: resolving a year to a batch by taking the first

@@ -46,6 +46,17 @@ use Illuminate\Support\Facades\Route;
 
 // The only unauthenticated route. Clients call GET /sanctum/csrf-cookie first;
 // Sanctum registers that one itself.
+//
+// Rate limited, because it is the one door that opens without a session and it
+// had no limit at all: twenty-five wrong passwords in a row all answered 422
+// and never 429.
+//
+// The limit lives in the controller rather than as `throttle:` middleware here,
+// and that difference matters on this deployment. Route middleware counts every
+// request, successful ones included, so a shared campus IP -- BNU NATs its
+// traffic -- would burn its allowance on staff signing in correctly at nine
+// o'clock and lock out the office. Counting only failures is the behaviour
+// wanted: an honest user never consumes the budget.
 Route::post('auth/login', [AuthController::class, 'login']);
 
 Route::middleware('auth:sanctum')->group(function () {

@@ -25,6 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
+import { reportFailure } from "@/lib/api/failure";
 import { ArrowRight, Check, Pencil, Trash2, Plus, AlertTriangle, SearchX } from "lucide-react";
 import { HowTo, StepHeading, StepNumber } from "@/components/scholarship/guidance";
 import { pkr } from "@/components/scholarship/helpers";
@@ -281,8 +282,15 @@ function EditStudentScholarshipPage() {
             scholarshipName={
               scholarships.find((s) => s.id === award.scholarshipId)?.name ?? award.scholarshipId
             }
-            onSave={(components, reason) => {
-              editAwardByHand(award.id, components, reason);
+            onSave={async (components, reason) => {
+              try {
+                await editAwardByHand(award.id, components, reason);
+              } catch (error) {
+                reportFailure(error, "The amounts were not saved.");
+
+                return;
+              }
+
               toast.success("Saved. The change is recorded in this student's history.");
               setAwardId(null);
             }}

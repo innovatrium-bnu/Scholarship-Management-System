@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   awardsGrantedBetween,
   awardsRevokedBetween,
+  everHeldRegNos,
   grantedAndRevokedBySemester,
   scholarRegNos,
   scholarsByIntakeYear,
@@ -94,6 +95,60 @@ describe("awardsRevokedBetween — counts when the award ended, not when it bega
 
     expect(awardsRevokedBetween(events, "2025-01-01", "2025-12-31")).toHaveLength(0);
     expect(awardsGrantedBetween(events, "2025-01-01", "2025-12-31")).toHaveLength(0);
+  });
+});
+
+describe("everHeldRegNos — who has ever held it, not who holds it now", () => {
+  it("includes a student whose award has since been revoked", () => {
+    // The defect this exists for: the scholarship page counted current holders
+    // under a heading promising "including past awards", so an archived
+    // scholarship whose awards had all ended reported nobody.
+    const events = [
+      granted({ awardId: "aw-1", studentRegNo: "F23-0001", scholarshipId: "sch-a" }),
+      revoked({ awardId: "aw-1", studentRegNo: "F23-0001", scholarshipId: "sch-a" }),
+    ];
+
+    expect(everHeldRegNos(events, "sch-a")).toEqual(new Set(["F23-0001"]));
+  });
+
+  it("counts a student once however many awards of it they have held", () => {
+    const events = [
+      granted({ awardId: "aw-1", studentRegNo: "F23-0001", scholarshipId: "sch-a" }),
+      revoked({ awardId: "aw-1", studentRegNo: "F23-0001", scholarshipId: "sch-a" }),
+      granted({ awardId: "aw-2", studentRegNo: "F23-0001", scholarshipId: "sch-a" }),
+    ];
+
+    expect(everHeldRegNos(events, "sch-a").size).toBe(1);
+  });
+
+  it("ignores other scholarships", () => {
+    const events = [
+      granted({ awardId: "aw-1", studentRegNo: "F23-0001", scholarshipId: "sch-a" }),
+      granted({ awardId: "aw-2", studentRegNo: "F23-0002", scholarshipId: "sch-b" }),
+    ];
+
+    expect(everHeldRegNos(events, "sch-a")).toEqual(new Set(["F23-0001"]));
+  });
+
+  it("excludes an award whose batch was undone, because it was never really held", () => {
+    const events = [
+      granted({ awardId: "aw-1", studentRegNo: "F23-0001", scholarshipId: "sch-a" }),
+      {
+        kind: "award.undone" as const,
+        at: "2025-09-02T10:00:00.000Z",
+        actor: "Registrar Office",
+        awardId: "aw-1",
+        studentRegNo: "F23-0001",
+        scholarshipId: "sch-a",
+        batchId: "bat-1",
+      },
+    ];
+
+    expect(everHeldRegNos(events, "sch-a").size).toBe(0);
+  });
+
+  it("is empty for a scholarship nobody has ever been granted", () => {
+    expect(everHeldRegNos([], "sch-a").size).toBe(0);
   });
 });
 

@@ -14,6 +14,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { reportFailure } from "@/lib/api/failure";
 import { PageHeader } from "@/components/scholarship/AppShell";
 import { useStore } from "@/lib/scholarship/store";
 import {
@@ -177,13 +178,21 @@ function ApplicationsPage() {
   const allPicked = selectable.length > 0 && selectable.every((s) => picked.has(s.app.id));
   const chosen = selectable.filter((s) => picked.has(s.app.id));
 
-  const runBulkReject = () => {
+  const runBulkReject = async () => {
     const target = chosen.length > 0 ? chosen : failing;
-    rejectApplications(
-      target.map((s) => ({ id: s.app.id, reason: s.screening.rejectionReason })),
-      bulkNote.trim() ||
-        `Cleared ${target.length} application${target.length === 1 ? "" : "s"} that failed the eligibility criteria.`,
-    );
+
+    try {
+      await rejectApplications(
+        target.map((s) => ({ id: s.app.id, reason: s.screening.rejectionReason })),
+        bulkNote.trim() ||
+          `Cleared ${target.length} application${target.length === 1 ? "" : "s"} that failed the eligibility criteria.`,
+      );
+    } catch (error) {
+      reportFailure(error, "These applications were not turned down.");
+
+      return;
+    }
+
     toast.success(
       `${target.length} application${target.length === 1 ? "" : "s"} turned down. Each one records the criterion it failed.`,
     );

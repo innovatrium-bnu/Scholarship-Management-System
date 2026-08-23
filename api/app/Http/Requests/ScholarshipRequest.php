@@ -95,7 +95,15 @@ class ScholarshipRequest extends FormRequest
              * it.
              */
             'coverage' => ['sometimes', 'array'],
-            'coverage.*.feeHead' => ['required', 'string', Rule::exists('fee_heads', 'name')],
+            // `distinct`, because coverage_lines is UNIQUE(scholarship_id,
+            // fee_head). Without it two lines on the same fee head passed
+            // validation and collided in Oracle, so a duplicate row -- an
+            // ordinary mistake on a five-step form -- came back as a 500
+            // carrying ORA-00001 and the schema names instead of a 422 naming
+            // the field.
+            'coverage.*.feeHead' => [
+                'required', 'string', 'distinct', Rule::exists('fee_heads', 'name'),
+            ],
             'coverage.*.benefitKind' => [
                 'required', Rule::in(['Percentage', 'Full waiver', 'Fixed amount']),
             ],

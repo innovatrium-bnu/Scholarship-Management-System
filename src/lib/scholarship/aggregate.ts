@@ -79,6 +79,29 @@ export function awardsGrantedBetween(
   );
 }
 
+/**
+ * Everyone ever granted this scholarship, whether or not they still hold it.
+ *
+ * From the event log rather than from the awards list, because the awards a
+ * screen has in memory are the *active* ones — a revoked award is not in that
+ * list at all. The scholarship page claimed "N in total, including past
+ * awards" while counting only current holders, so an archived scholarship
+ * whose awards had all ended reported zero recipients when it had twenty-four.
+ *
+ * Undone batches are excluded on the same terms as everywhere else here: those
+ * students never really held it, so counting them would overstate the history
+ * of a mis-click.
+ */
+export function everHeldRegNos(events: readonly DomainEvent[], scholarshipId: string): Set<string> {
+  const undone = new Set(eventsOfKind(events, "award.undone").map((e) => e.awardId));
+
+  return new Set(
+    eventsOfKind(events, "award.granted")
+      .filter((e) => e.scholarshipId === scholarshipId && !undone.has(e.awardId))
+      .map((e) => e.studentRegNo),
+  );
+}
+
 /** Grants and revocations per term, for the dashboard's movement chart. */
 export function grantedAndRevokedBySemester(
   events: readonly DomainEvent[],

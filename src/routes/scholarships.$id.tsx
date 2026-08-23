@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/scholarship/AppShell";
 import { useStore } from "@/lib/scholarship/store";
 import { computeMerge } from "@/lib/scholarship/merge";
+import { everHeldRegNos } from "@/lib/scholarship/aggregate";
 import { precedenceOf, shortSchool, batchRuleSentence } from "@/components/scholarship/helpers";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -47,7 +48,7 @@ export const Route = createFileRoute("/scholarships/$id")({
 
 function ScholarshipDetail() {
   const { id } = useParams({ from: "/scholarships/$id" });
-  const { scholarships, awards, students } = useStore();
+  const { scholarships, awards, students, events } = useStore();
   const [auditOpen, setAuditOpen] = useState(false);
   const scholarship = scholarships.find((s) => s.id === id);
 
@@ -88,6 +89,21 @@ function ScholarshipDetail() {
   }
 
   const activeCount = recipients.filter((r) => r.award.status === "Active").length;
+
+  /*
+   * How many students have ever held this, not how many hold it now.
+   *
+   * `recipients` is built from the store's awards list, which is active-only —
+   * a revoked award is not in it. So the hint below, which says "in total,
+   * including past awards", was counting exactly the awards it promised to
+   * look past: an archived scholarship whose awards had all ended reported 0
+   * when twenty-four students had held it. The event log is the only record
+   * that survives a revocation, which is what it is for.
+   */
+  const everHeld = useMemo(
+    () => (scholarship ? everHeldRegNos(events, scholarship.id).size : 0),
+    [events, scholarship],
+  );
   const priority = precedenceOf(scholarships, scholarship.id);
 
   return (
@@ -154,7 +170,7 @@ function ScholarshipDetail() {
             tone="teal"
             label="Students holding it"
             value={String(activeCount)}
-            hint={`${recipients.length} in total, including past awards`}
+            hint={`${everHeld} in total, including past awards`}
           />
           <StatCard
             icon={ListOrdered}

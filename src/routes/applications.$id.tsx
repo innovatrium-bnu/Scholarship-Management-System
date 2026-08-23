@@ -13,6 +13,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { reportFailure } from "@/lib/api/failure";
 import { PageHeader } from "@/components/scholarship/AppShell";
 import { useStore } from "@/lib/scholarship/store";
 import { useScreenedApplications } from "@/lib/scholarship/useApplications";
@@ -431,8 +432,18 @@ function ApplicationDetail() {
               : ""
           }
           onOpenChange={(o) => !o && setAction(null)}
-          onConfirm={(reason, pct) => {
-            decideApplication(app.id, action, reason, { awardedPct: pct });
+          onConfirm={async (reason, pct) => {
+            // Awaited, and the success path is behind the await. Unawaited,
+            // a refused decision still closed the dialog, still announced
+            // success, and still navigated away from the application.
+            try {
+              await decideApplication(app.id, action, reason, { awardedPct: pct });
+            } catch (error) {
+              reportFailure(error, "This decision was not recorded.");
+
+              return;
+            }
+
             toast.success(
               action === "Approved"
                 ? `Approved. ${student.name} now holds a need-based award at ${pct}% of tuition.`
@@ -450,8 +461,15 @@ function ApplicationDetail() {
         open={reopenOpen}
         onOpenChange={setReopenOpen}
         madeAward={!!app.decision?.awardId}
-        onConfirm={(reason) => {
-          reopenApplication(app.id, reason);
+        onConfirm={async (reason) => {
+          try {
+            await reopenApplication(app.id, reason);
+          } catch (error) {
+            reportFailure(error, "This application was not reopened.");
+
+            return;
+          }
+
           toast.success("Back in the queue for review.");
           setReopenOpen(false);
         }}

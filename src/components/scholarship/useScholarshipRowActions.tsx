@@ -19,6 +19,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
+import { reportFailure } from "@/lib/api/failure";
 import { useStore } from "@/lib/scholarship/store";
 import { ScholarshipForm } from "@/components/scholarship/ScholarshipForm";
 import { AuditPanel } from "@/components/scholarship/AuditPanel";
@@ -44,8 +45,17 @@ export function useScholarshipRowActions() {
         id: `sch-${Math.random().toString(36).slice(2, 7)}`,
         name: `${s.name} (copy)`,
       };
-      addScholarship(copy, "Copied from " + s.name);
-      toast.success(`${copy.name} created. Open it to set its batches and amounts.`);
+      void (async () => {
+        try {
+          await addScholarship(copy, "Copied from " + s.name);
+        } catch (error) {
+          reportFailure(error, `${copy.name} was not created.`);
+
+          return;
+        }
+
+        toast.success(`${copy.name} created. Open it to set its batches and amounts.`);
+      })();
     },
     onArchive: (s: Scholarship) => setArchiving(s),
     onAudit: (s: Scholarship) => setAuditFor(s),
@@ -66,8 +76,15 @@ export function useScholarshipRowActions() {
               initial={editing}
               isEdit
               onCancel={() => setEditing(null)}
-              onSubmit={(data, reason) => {
-                updateScholarship(editing.id, data, reason);
+              onSubmit={async (data, reason) => {
+                try {
+                  await updateScholarship(editing.id, data, reason);
+                } catch (error) {
+                  reportFailure(error, `${data.name} was not saved.`);
+
+                  return;
+                }
+
                 toast.success(`${data.name} saved.`);
                 setEditing(null);
               }}
@@ -114,9 +131,17 @@ export function useScholarshipRowActions() {
             <AlertDialogCancel className="h-11 rounded-xl">Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="h-11 rounded-xl"
-              onClick={() => {
+              onClick={async () => {
                 if (!archiving) return;
-                archiveScholarship(archiving.id, archiveMode === "end_all", "Fall 2025");
+
+                try {
+                  await archiveScholarship(archiving.id, archiveMode === "end_all", "Fall 2025");
+                } catch (error) {
+                  reportFailure(error, `${archiving.name} was not retired.`);
+
+                  return;
+                }
+
                 toast.success(`${archiving.name} is now retired.`);
                 setArchiving(null);
               }}

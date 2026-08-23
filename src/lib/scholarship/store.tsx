@@ -135,7 +135,7 @@ interface StoreCtx extends StoreState {
     id: string,
     outcome: "Approved" | "Rejected" | "On hold",
     reason: string,
-    opts?: { awardedPct?: number; automatic?: boolean },
+    opts?: { awardedPct?: number },
   ) => Promise<void>;
   /** Turn down every listed application at once, each with its own reason. */
   rejectApplications: (entries: { id: string; reason: string }[], summary: string) => Promise<void>;
@@ -523,7 +523,10 @@ function useStoreValue(inputs: StoreInputs): StoreCtx {
           outcome,
           reason,
           awardedPct: opts?.awardedPct ?? null,
-          automatic: opts?.automatic ?? false,
+          // `automatic` is no longer sent. The server decides whether a
+          // decision was the filter's or a person's, because it is the only
+          // party that knows, and a client that could claim otherwise could
+          // file its own ruling as the machine's.
         });
         // Approving grants the award in the same transaction.
         await refresh(keys.applications, keys.awards);

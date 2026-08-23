@@ -173,7 +173,18 @@ final class ApplicationController extends Controller
             // Only meaningful on approval; defaults to what the student asked
             // for, which is what store.tsx does.
             'awardedPct' => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'automatic' => ['sometimes', 'boolean'],
+            /*
+             * `automatic` is deliberately not accepted from the client.
+             *
+             * It marks a decision the criteria filter made rather than a
+             * person, and it is the column a report groups by to tell the two
+             * apart. AGENTS.md states the filter sorts and never decides, so
+             * nothing reaching this endpoint is ever automatic: every request
+             * here is a person pressing a button. Taking the flag from the
+             * caller let a client label its own decision as the machine's,
+             * which is DEF-03 again -- an identity supplied by whoever benefits
+             * from it.
+             */
         ]);
 
         /*
@@ -197,7 +208,6 @@ final class ApplicationController extends Controller
                 $validated['reason'],
                 Actor::from($request),
                 $validated['awardedPct'] ?? null,
-                $validated['automatic'] ?? false,
             );
         } catch (QueryException $e) {
             /*

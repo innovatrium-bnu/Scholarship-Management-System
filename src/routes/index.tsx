@@ -22,6 +22,7 @@ import { computeMerge, waiverValuePKR } from "@/lib/scholarship/merge";
 import { pkr, shortSchool } from "@/components/scholarship/helpers";
 import { useReference } from "@/lib/scholarship/reference";
 import {
+  awardsGrantedBetween,
   awardsRevokedBetween,
   grantedAndRevokedBySemester,
   scholarsByIntakeYear,
@@ -122,10 +123,22 @@ function Dashboard() {
 
   const kpi = useMemo(() => {
     const totalScholars = uniqueScholarRegs.size;
-    const newThisYear = scholars.filter((a) => a.effectiveFrom.startsWith("2025")).length;
-    /* Counted from the revocation record. This used to filter on
-       `effectiveFrom`, which is when the award *started* — so it reported
-       awards that began in 2025 and were revoked at any point, ever. */
+    /* Both counted from the event log, on the same terms, so the pair can be
+       read together.
+
+       "Given out" used to filter `scholars`, which holds only *active* awards —
+       so a grant made this year and revoked later vanished from it, and the
+       tile read 405 where 412 were granted. The two tiles then disagreed about
+       the same seven awards: each one was removed from this count *and* added
+       to the one below, so a single revocation moved the pair by two. The
+       gained/lost chart further down this page has always been event-based and
+       showed 412 beside a tile saying 405.
+
+       AGENTS.md §4a is about exactly this: dashboard figures come from
+       aggregate.ts, not from inline arithmetic over whatever list is to hand.
+       `lostThisYear` was migrated to the event log and given a regression test
+       named for the mistake; `newThisYear` was left behind. */
+    const newThisYear = awardsGrantedBetween(events, "2025-01-01", "2025-12-31").length;
     const lostThisYear = awardsRevokedBetween(events, "2025-01-01", "2025-12-31").length;
     let waiverTotal = 0;
     for (const reg of uniqueScholarRegs) {

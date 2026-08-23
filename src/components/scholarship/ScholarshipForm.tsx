@@ -10,6 +10,7 @@ import type {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { reportFailure } from "@/lib/api/failure";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -567,10 +568,21 @@ export function ScholarshipForm({
                       />
                       <Button
                         className="h-10 rounded-lg"
-                        onClick={() => {
+                        onClick={async () => {
                           const name = newFeeHeadName.trim();
                           if (!name) return;
-                          addFeeHead(name);
+
+                          // Awaited before the line is pointed at it: a fee
+                          // head that failed to save would leave a coverage
+                          // line naming something the server never accepted.
+                          try {
+                            await addFeeHead(name);
+                          } catch (error) {
+                            reportFailure(error, "That fee head was not added.");
+
+                            return;
+                          }
+
                           updateLine(setData, c.id, { feeHead: name });
                           setAddingFeeHeadFor(null);
                           setNewFeeHeadName("");

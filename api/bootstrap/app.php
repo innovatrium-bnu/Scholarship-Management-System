@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\RejectNonFiniteNumbers;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -47,4 +48,32 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*'),
         );
+
+        /*
+         * A uniqueness collision is a conflict, not a server fault.
+         *
+         * ORA-00001 is the only unique-constraint error Oracle raises, and it
+         * always means the same thing: the caller asked for something that
+         * already exists. Answering 500 was wrong twice over -- it told the
+         * client the server had broken when the request was at fault, and with
+         * APP_DEBUG on it returned the failing SQL, its bind values and the
+         * database host, port and name to whoever sent it.
+         *
+         * Validation still comes first, and is still where a good message
+         * lives: `distinct` on the two array fields that could collide, and the
+         * pre-flight checks in AssignmentGuard and ApplicationController. This
+         * is the backstop for what those cannot see -- a race between two
+         * writers, and any future endpoint whose author forgets. Controllers
+         * that can say something more specific catch it themselves and are
+         * unaffected; this only handles what reaches the top.
+         */
+        $exceptions->render(function (QueryException $e, Request $request) {
+            if (! $request->is('api/*') || ! str_contains($e->getMessage(), 'ORA-00001')) {
+                return null;
+            }
+
+            return response()->json([
+                'message' => 'That already exists. Reload and check the current state before retrying.',
+            ], 409);
+        });
     })->create();
