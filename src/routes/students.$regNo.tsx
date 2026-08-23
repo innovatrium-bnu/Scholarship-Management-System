@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
+import { reportFailure } from "@/lib/api/failure";
 import {
   AlertTriangle,
   History,
@@ -638,8 +639,15 @@ function StudentDetail() {
           eligible={eligible}
           scholarships={scholarships}
           existing={active}
-          onApply={(award, message) => {
-            addAward(award);
+          onApply={async (award, message) => {
+            try {
+              await addAward(award);
+            } catch (error) {
+              reportFailure(error, "This scholarship was not given.");
+
+              return;
+            }
+
             toast.success(message);
             setAddOpen(false);
           }}
@@ -651,7 +659,7 @@ function StudentDetail() {
           award={revokeFor}
           scholarship={scholarships.find((s) => s.id === revokeFor.scholarshipId)!}
           onOpenChange={(o) => !o && setRevokeFor(null)}
-          onConfirm={(reason, effective, timing) => {
+          onConfirm={async (reason, effective, timing) => {
             const before = computeMerge(student, active, scholarships);
             const beforeTrimmed = new Set(
               before
@@ -662,7 +670,17 @@ function StudentDetail() {
                 )
                 .map((m) => m.award.id),
             );
-            revokeAward(revokeFor.id, reason, effective, timing);
+            // Everything below recomputes the merge as it will be *after* the
+            // revocation and tells the user which awards were restored. None of
+            // that is true unless the write landed, so it waits for it.
+            try {
+              await revokeAward(revokeFor.id, reason, effective, timing);
+            } catch (error) {
+              reportFailure(error, "This scholarship was not taken back.");
+
+              return;
+            }
+
             const remaining = active.filter((a) => a.id !== revokeFor.id);
             const after = computeMerge(student, remaining, scholarships);
             const restored: string[] = [];
@@ -982,6 +1000,17 @@ function MergeTable({
   );
   const totalApp = rows.reduce((a, r) => a + (r.c.kind === "Fixed amount" ? 0 : r.c.appliedPct), 0);
 
+  /*
+   * A scholarship allowed past the ceiling by donor agreement.
+   *
+   * The total row treated anything at or above 100% as "already at the 100%
+   * limit, nothing left to give". For a student holding the donor award that
+   * printed the sentence beside a total of 140% — self-contradictory on its
+   * face, and wrong about the thing it was warning of, because the exempt
+   * scholarship is precisely the one that *can* still pay.
+   */
+  const exceeding = rows.find((r) => r.m.scholarship.mayExceedCeiling);
+
   if (rows.length === 0) {
     return (
       <p className="py-4 text-sm text-muted-foreground">
@@ -1051,9 +1080,11 @@ function MergeTable({
             </TableCell>
             <TableCell className="tabular text-right text-sm font-bold">{totalApp}%</TableCell>
             <TableCell className="pr-5 text-[13px] text-muted-foreground">
-              {totalApp >= 100
-                ? "Nothing left to give, already at the 100% limit"
-                : `${100 - totalApp}% of tuition still unpaid`}
+              {totalApp > 100
+                ? `Past 100% by agreement with ${exceeding?.m.scholarship.donorName ?? "the donor"}`
+                : totalApp === 100
+                  ? "Nothing left to give, already at the 100% limit"
+                  : `${100 - totalApp}% of ${feeHead.toLowerCase()} still unpaid`}
             </TableCell>
           </TableRow>
         </TableBody>

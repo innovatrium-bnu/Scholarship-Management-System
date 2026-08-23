@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { RequiresCapability } from "@/components/scholarship/RequiresCapability";
 import { toast } from "sonner";
+import { reportFailure } from "@/lib/api/failure";
 import { PageHeader } from "@/components/scholarship/AppShell";
 import { useStore } from "@/lib/scholarship/store";
 import { ScholarshipForm } from "@/components/scholarship/ScholarshipForm";
@@ -58,8 +59,15 @@ function CreateScholarshipPage() {
         <ScholarshipForm
           isEdit={false}
           onCancel={() => nav({ to: "/scholarships" })}
-          onSubmit={(data, reason) => {
-            addScholarship(data, reason);
+          onSubmit={async (data, reason) => {
+            try {
+              await addScholarship(data, reason);
+            } catch (error) {
+              reportFailure(error, `${data.name} was not created.`);
+
+              return;
+            }
+
             toast.success(`${data.name} created. You can now give it to students.`);
             nav({ to: "/scholarships" });
           }}

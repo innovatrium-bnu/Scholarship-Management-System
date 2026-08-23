@@ -133,9 +133,35 @@ final class ScholarshipController extends Controller
             $columns = $request->columns();
             $before = $scholarship->only(array_keys($columns));
 
-            $scholarship->update($columns);
+            /*
+             * fill() then getDirty(), so the audit entry describes a change
+             * that happened.
+             *
+             * Every field on this request is `sometimes`, so `PATCH` with an
+             * empty body validated, updated nothing, and still wrote "Updated
+             * scholarship X" to an append-only trail. Repeat it and the record
+             * shows a scholarship edited ten times with nothing ever
+             * different. An audit log that reports changes nobody made is
+             * worth less than one with a visible gap, because a reader cannot
+             * tell which entries mean anything.
+             *
+             * Eloquent's dirty check is used rather than comparing by hand for
+             * the same reason StudentController uses it: it is cast aware,
+             * compares floats within an epsilon and falls back to strcmp for
+             * numeric strings, none of which a hand-rolled `==` here would do.
+             */
+            $scholarship->fill($columns);
+            $changed = $scholarship->getDirty();
+            $scholarship->save();
 
-            $this->syncChildren($scholarship, $request);
+            // The children are replaced wholesale rather than diffed, so a
+            // request that sent either collection is a change regardless of
+            // whether any column moved.
+            $touchedChildren = $this->syncChildren($scholarship, $request);
+
+            if ($changed === [] && ! $touchedChildren) {
+                return;
+            }
 
             $this->audit->record(
                 entityType: 'Scholarship',
@@ -143,8 +169,8 @@ final class ScholarshipController extends Controller
                 action: 'Updated scholarship '.$scholarship->name,
                 actor: Actor::from($request),
                 reason: $request->input('reason'),
-                oldValue: $before,
-                newValue: $columns,
+                oldValue: array_intersect_key($before, $changed),
+                newValue: $changed,
             );
         });
 
@@ -220,9 +246,16 @@ final class ScholarshipController extends Controller
      * Not sent means leave alone, which is what makes PATCH of a single field
      * work without the caller having to echo back terms it did not touch.
      */
-    private function syncChildren(Scholarship $scholarship, ScholarshipRequest $request): void
+    /**
+     * Replace the coverage lines and rules, when the request sent them.
+     *
+     * @return bool whether either collection was touched, so update() can tell
+     *              a real edit from a PATCH that changed nothing at all
+     */
+    private function syncChildren(Scholarship $scholarship, ScholarshipRequest $request): bool
     {
         $coverage = $request->coverageColumns();
+        $rules = $request->ruleColumns();
 
         if ($coverage !== null) {
             $scholarship->coverageLines()->delete();
@@ -232,8 +265,6 @@ final class ScholarshipController extends Controller
             }
         }
 
-        $rules = $request->ruleColumns();
-
         if ($rules !== null) {
             $scholarship->rules()->delete();
 
@@ -241,6 +272,8 @@ final class ScholarshipController extends Controller
                 $scholarship->rules()->create($rule);
             }
         }
+
+        return $coverage !== null || $rules !== null;
     }
 
     /**

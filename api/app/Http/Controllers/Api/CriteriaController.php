@@ -84,7 +84,12 @@ final class CriteriaController extends Controller
                 'documents', 'existingCoverage', 'duplicate',
             ])],
             'cgpaThresholds' => ['present', 'array'],
-            'cgpaThresholds.*.fromBatch' => ['required', 'string', Rule::exists('batches', 'label')],
+            // Same reasoning as coverage.*.feeHead in ScholarshipRequest:
+            // cgpa_thresholds is UNIQUE(scholarship_id, from_batch), and two
+            // rows for one intake reached Oracle as a raw ORA-00001 500.
+            'cgpaThresholds.*.fromBatch' => [
+                'required', 'string', 'distinct', Rule::exists('batches', 'label'),
+            ],
             'cgpaThresholds.*.minCgpa' => ['required', 'numeric', 'min:0', 'max:4'],
         ]);
 

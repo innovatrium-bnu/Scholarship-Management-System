@@ -74,6 +74,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { reportFailure } from "@/lib/api/failure";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/assign/$scholarshipId")({
@@ -369,8 +370,15 @@ function AssignFlow() {
       {
         action: {
           label: "Undo",
-          onClick: () => {
-            undoBatch(batchId);
+          onClick: async () => {
+            try {
+              await undoBatch(batchId);
+            } catch (error) {
+              reportFailure(error, "The batch was not undone.");
+
+              return;
+            }
+
             toast("Undone. Nothing was saved.");
             nav({ to: "/scholarships" });
           },
@@ -657,8 +665,15 @@ function AssignFlow() {
             skipped={
               [...selected].filter((r) => conflictSet.has(r) && resolution === "skip").length
             }
-            onUndo={() => {
-              undoBatch(committedBatchId);
+            onUndo={async () => {
+              try {
+                await undoBatch(committedBatchId);
+              } catch (error) {
+                reportFailure(error, "The batch was not undone.");
+
+                return;
+              }
+
               toast("Undone. Nothing was saved.");
               nav({ to: "/scholarships" });
             }}

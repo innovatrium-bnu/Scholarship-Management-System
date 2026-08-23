@@ -184,6 +184,42 @@ final class ReportService
     }
 
     /**
+     * Everyone ever granted this scholarship, whether or not they still hold it.
+     *
+     * From the event log rather than from the awards themselves, for the same
+     * reason the two functions above are: a revoked award may not be in the
+     * caller's list at all. The scholarship page claimed "N in total, including
+     * past awards" while counting only current holders, so an archived
+     * scholarship whose awards had all ended reported zero recipients when it
+     * had twenty-four.
+     *
+     * Undone batches are excluded on the same terms as everywhere else here.
+     *
+     * @param  DomainEvent[]  $events
+     * @return list<string>
+     */
+    public function everHeldRegNos(array $events, string $scholarshipId): array
+    {
+        $undone = $this->undoneAwardIds($events);
+
+        $holders = [];
+
+        foreach ($events as $event) {
+            if ($event->kind !== DomainEvent::AWARD_GRANTED) {
+                continue;
+            }
+
+            if ($event->scholarshipId !== $scholarshipId || isset($undone[$event->awardId])) {
+                continue;
+            }
+
+            $holders[$event->studentRegNo] = true;
+        }
+
+        return array_keys($holders);
+    }
+
+    /**
      * Scholarship holders by intake year.
      *
      * A year covers *every* batch ending in it. The Spring and Fall intakes of

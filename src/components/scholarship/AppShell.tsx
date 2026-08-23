@@ -124,7 +124,10 @@ const NAV: { heading: string; items: NavItem[] }[] = [
         label: "Priority order",
         hint: "Which one is paid first",
         icon: ListOrdered,
-        needs: "scholarships.edit",
+        /* No `needs`: the screen reads for every role and only its controls
+           are gated, and the order is the answer to "why was this student
+           paid 40% and not 60%" -- which Reporting is the role most likely
+           to be asked. */
       },
       {
         to: "/settings/criteria",

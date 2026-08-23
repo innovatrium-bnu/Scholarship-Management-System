@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Info, Plus, RotateCcw, Save, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { reportFailure } from "@/lib/api/failure";
 import { PageHeader } from "@/components/scholarship/AppShell";
 import { useStore } from "@/lib/scholarship/store";
 import { useScreenedApplications } from "@/lib/scholarship/useApplications";
@@ -191,8 +192,15 @@ function CriteriaPage() {
       draft.cgpaThresholds.map((t) => (t.id === id ? { ...t, ...patch } : t)),
     );
 
-  const save = () => {
-    updateCriteria(live.scholarshipId, draft, reason.trim());
+  const save = async () => {
+    try {
+      await updateCriteria(live.scholarshipId, draft, reason.trim());
+    } catch (error) {
+      reportFailure(error, "The criteria were not saved.");
+
+      return;
+    }
+
     toast.success("Criteria saved. The review queue has been re-sorted against them.");
     setReason("");
   };

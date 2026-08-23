@@ -5,6 +5,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/lib/scholarship/store";
 import { formatDistanceToNow } from "date-fns";
@@ -20,6 +21,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { reportFailure } from "@/lib/api/failure";
 
 export function AuditPanel({
   open,
@@ -34,7 +36,39 @@ export function AuditPanel({
   entityId?: string;
   studentRegNo?: string;
 }) {
-  const { audit, awards, batches, undoBatch } = useStore();
+  const { audit, awards, batches, events, undoBatch } = useStore();
+
+  /*
+   * Which student an award belongs to — including awards that have ended.
+   *
+   * This used to be `awards.find(...)`, and the store's awards list holds only
+   * *active* ones. So the moment an award was revoked, every audit row about it
+   * stopped matching: not just the "Revoked award, effective …" line, but the
+   * original "Granted" line too. A student's History drawer said "Nothing has
+   * been changed yet" while two rows sat in the database describing the
+   * scholarship they had just lost — the trail went blank at precisely the
+   * moment somebody would open it.
+   *
+   * The event log is the record that survives a revocation, so the ownership
+   * of an award is read from there and the active list is layered on top for
+   * anything too new to have an event yet.
+   */
+  const studentOfAward = useMemo(() => {
+    const owner = new Map<string, string>();
+
+    for (const event of events) {
+      if ("awardId" in event && "studentRegNo" in event && event.awardId) {
+        owner.set(event.awardId, event.studentRegNo);
+      }
+    }
+
+    for (const award of awards) {
+      owner.set(award.id, award.studentRegNo);
+    }
+
+    return owner;
+  }, [events, awards]);
+
   const relevant = audit.filter((e) => {
     if (entityType && e.entityType === entityType && e.entityId === entityId) return true;
     if (entityType === "Scholarship" && e.entityType === "Batch") {
@@ -44,15 +78,11 @@ export function AuditPanel({
     if (studentRegNo) {
       if (e.entityType === "Student" && e.entityId === studentRegNo) return true;
       if (e.entityType === "Award") {
-        const a = awards.find((x) => x.id === e.entityId);
-        if (a?.studentRegNo === studentRegNo) return true;
+        if (studentOfAward.get(e.entityId) === studentRegNo) return true;
       }
       if (e.entityType === "Batch") {
         const b = batches.find((x) => x.id === e.entityId);
-        if (
-          b?.awardIds.some((id) => awards.find((a) => a.id === id)?.studentRegNo === studentRegNo)
-        )
-          return true;
+        if (b?.awardIds.some((id) => studentOfAward.get(id) === studentRegNo)) return true;
       }
     }
     return false;
@@ -106,8 +136,15 @@ export function AuditPanel({
                           <Button
                             variant="outline"
                             className="h-9 rounded-lg"
-                            onClick={() => {
-                              undoBatch(batch.id);
+                            onClick={async () => {
+                              try {
+                                await undoBatch(batch.id);
+                              } catch (error) {
+                                reportFailure(error, "The batch was not undone.");
+
+                                return;
+                              }
+
                               toast.success(
                                 `Undone. ${batch.awardIds.length} award${batch.awardIds.length === 1 ? "" : "s"} removed.`,
                               );

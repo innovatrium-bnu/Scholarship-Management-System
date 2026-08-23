@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Persistence\Writers;
 
 use App\Domain\Data\DomainEvent;
+use App\Domain\Support\RevocationCause;
 use App\Models\ApplicationDecision;
 use App\Models\Award;
 use App\Models\NeedApplication;
@@ -32,6 +33,7 @@ final class ApplicationWriter
     public function __construct(
         private readonly AuditWriter $audit,
         private readonly DomainEventRepository $events,
+        private readonly AwardWriter $awards,
     ) {}
 
     public function decide(
@@ -146,6 +148,36 @@ final class ApplicationWriter
         DB::transaction(function () use ($application, $reason, $actor) {
             $previous = $application->decision;
 
+            /*
+             * End the award the approval created, before the decision that
+             * links them is deleted.
+             *
+             * Reopening used to remove the decision row and nothing else, so an
+             * approved application went back into the queue while the award it
+             * had produced stayed Active and kept paying. Worse, the decision
+             * row was the only thing tying the two together: once it was gone
+             * the award was an orphan, its reason_code still naming an
+             * application that no longer had a decision. Whoever eventually
+             * noticed had to revoke it by hand, and the trail then said
+             * "Revoked by hand" -- never that an approval had been undone.
+             *
+             * Hence a real revocation with its own cause. RevocationCause has
+             * declared APPLICATION_REOPENED since the union was ported; this is
+             * the code path it was declared for, and until now nothing wrote it.
+             */
+            $award = $previous?->award_id === null ? null : Award::find($previous->award_id);
+
+            if ($award !== null && $award->status === 'Active') {
+                $this->awards->revoke(
+                    $award,
+                    now()->format('Y-m-d'),
+                    'immediate',
+                    RevocationCause::APPLICATION_REOPENED,
+                    $reason,
+                    $actor,
+                );
+            }
+
             $previous?->delete();
             $application->update(['status' => 'Submitted']);
 
@@ -159,6 +191,10 @@ final class ApplicationWriter
                     'outcome' => $previous->outcome,
                     'by' => $previous->decided_by,
                     'reason' => $previous->reason,
+                    // Named here as well, because the decision row that pointed
+                    // at it is deleted a line above and the audit entry becomes
+                    // the only record that the two were connected.
+                    'awardId' => $previous->award_id,
                 ],
             );
         });
@@ -185,7 +221,28 @@ final class ApplicationWriter
                     continue;
                 }
 
-                $this->decide($application, 'Rejected', $entry['reason'], $role, automatic: true);
+                /*
+                 * automatic: false. A person pressed this button.
+                 *
+                 * It used to pass true, which decide() reads two ways: the
+                 * actor becomes 'Eligibility filter' instead of the signed-in
+                 * role, and application_decisions.automatic is stored as true.
+                 * That second one is the damaging half -- it is the column a
+                 * report groups by to separate applications the filter sorted
+                 * from applications a person actually ruled on, so every bulk
+                 * rejection the committee made counted as a machine decision.
+                 *
+                 * AGENTS.md is explicit that the criteria filter sorts and
+                 * never decides, and that an automatic rejection nobody pressed
+                 * a button for is one nobody can defend on appeal. Recording a
+                 * human decision as an automatic one produces exactly that
+                 * record: indefensible, and wrong about who is answerable.
+                 *
+                 * Within one transaction the summary entry named the role while
+                 * every detail row named the filter -- the trail disagreed with
+                 * itself about a single act.
+                 */
+                $this->decide($application, 'Rejected', $entry['reason'], $role, automatic: false);
                 $rejected++;
             }
 

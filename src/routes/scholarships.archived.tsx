@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { RequiresCapability } from "@/components/scholarship/RequiresCapability";
 import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/scholarship/AppShell";
 import { useStore } from "@/lib/scholarship/store";
+import { can } from "@/lib/scholarship/roles";
 import { ScholarshipsTable } from "@/components/scholarship/ScholarshipsTable";
 import { useScholarshipRowActions } from "@/components/scholarship/useScholarshipRowActions";
 import { SearchField, ResultCount, Callout } from "@/components/scholarship/ui-kit";
@@ -21,10 +21,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Archive } from "lucide-react";
 import { toast } from "sonner";
+import { reportFailure } from "@/lib/api/failure";
 import type { Scholarship } from "@/lib/scholarship/types";
 
 export const Route = createFileRoute("/scholarships/archived")({
-  component: GuardedArchivedScholarshipsPage,
+  component: ArchivedScholarshipsPage,
   head: () => ({
     meta: [
       { title: "Retired scholarships | BNU Scholarships" },
@@ -44,9 +45,18 @@ export const Route = createFileRoute("/scholarships/archived")({
  * awards, and the whole thing can be brought back if it was retired by
  * mistake. That is the reason there is no delete anywhere: retiring is the
  * reversible version of the same intent.
+ *
+ * Deliberately not wrapped in RequiresCapability, and it was once: this is a
+ * listing, and the API serves it to anybody signed in. Guarding the page
+ * turned "here is what BNU used to offer" into a permission error for Data
+ * Entry and Reporting, and the guard bought nothing, because ScholarshipsTable
+ * already draws "Bring it back" only for a role holding `scholarships.edit`.
+ * The screens that do need the guard are the ones whose whole purpose is a
+ * write — creating a scholarship, assigning an award. Reading is not one.
  */
 function ArchivedScholarshipsPage() {
-  const { scholarships, awards, restoreScholarship } = useStore();
+  const { scholarships, awards, restoreScholarship, role } = useStore();
+  const mayEdit = can(role, "scholarships.edit");
   const { handlers, dialogs } = useScholarshipRowActions();
   const [q, setQ] = useState("");
   const [restoring, setRestoring] = useState<Scholarship | null>(null);
@@ -93,12 +103,21 @@ function ArchivedScholarshipsPage() {
               title: "Read it or check its history",
               body: "Click the name to read the rules. Use “More” to see every change ever made to it.",
             },
-            {
-              title: "Bring it back if you need to",
-              body: "“Bring it back” makes it available again for new awards. You will be asked why.",
-            },
+            mayEdit
+              ? {
+                  title: "Bring it back if you need to",
+                  body: "“Bring it back” makes it available again for new awards. You will be asked why.",
+                }
+              : {
+                  title: "Ask an Admin to bring one back",
+                  body: "Your role can read this list but not return a scholarship to use. An Admin or Super Admin does that from this same screen.",
+                },
           ]}
-          footer="To retire a scholarship in the first place, go to All scholarships, open “More” on its row, and choose “Retire it”."
+          footer={
+            mayEdit
+              ? "To retire a scholarship in the first place, go to All scholarships, open “More” on its row, and choose “Retire it”."
+              : "Retiring a scholarship in the first place is done from All scholarships, and also needs an Admin."
+          }
         />
 
         <Callout tone="teal" icon={Archive} title="Retiring is always reversible">
@@ -106,6 +125,13 @@ function ArchivedScholarshipsPage() {
           without destroying anything, so a mistake costs you one click to fix rather than a lost
           record.
         </Callout>
+
+        {!mayEdit ? (
+          <Callout tone="amber" title="You are signed in as a role that cannot bring one back">
+            {role} can read this list and the history of anything on it, but not put a scholarship
+            back into use. An Admin or Super Admin account is needed for that.
+          </Callout>
+        ) : null}
 
         <StepHeading
           n={1}
@@ -173,9 +199,17 @@ function ArchivedScholarshipsPage() {
             <AlertDialogCancel className="h-11 rounded-xl">Leave it retired</AlertDialogCancel>
             <AlertDialogAction
               className="h-11 rounded-xl"
-              onClick={() => {
+              onClick={async () => {
                 if (!restoring) return;
-                restoreScholarship(restoring.id, reason || "Brought back into use");
+
+                try {
+                  await restoreScholarship(restoring.id, reason || "Brought back into use");
+                } catch (error) {
+                  reportFailure(error, `${restoring.name} was not brought back.`);
+
+                  return;
+                }
+
                 toast.success(`${restoring.name} can be given out again.`);
                 setRestoring(null);
               }}
@@ -188,20 +222,5 @@ function ArchivedScholarshipsPage() {
 
       {dialogs}
     </>
-  );
-}
-
-/**
- * The permission boundary for this screen, applied before it renders.
- *
- * The sidebar hides this destination from roles that cannot use it, but a
- * URL is reachable regardless of what the menu shows. See
- * RequiresCapability for why the message arrives here rather than at save.
- */
-function GuardedArchivedScholarshipsPage() {
-  return (
-    <RequiresCapability needs="scholarships.edit" what="retire or restore a scholarship">
-      <ArchivedScholarshipsPage />
-    </RequiresCapability>
   );
 }
