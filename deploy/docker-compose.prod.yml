@@ -36,7 +36,7 @@ services:
     # init script path is the gvenzl one and not Oracle's own.
     volumes: !override
       - db-data:/opt/oracle/oradata
-      - ../docker/db-init-xe.sql:/container-entrypoint-initdb.d/10-app-user.sql:ro
+      - ./docker/db-init-xe.sql:/container-entrypoint-initdb.d/10-app-user.sql:ro
     # Not published. See the note above.
     ports: !override []
     healthcheck:
@@ -46,17 +46,32 @@ services:
       retries: 30
       start_period: 5m
     restart: unless-stopped
-    # On a 2 GB box Oracle will take everything it is allowed to. Capping it
-    # leaves room for php-fpm and nginx to answer while the database is busy.
-    mem_limit: 1200m
+    # No mem_limit here, and it is deliberate rather than an omission.
+    #
+    # The instinct on a 2 GB box is to cap the database so php-fpm and nginx
+    # keep room to answer. Doing that stops Oracle starting at all. Its
+    # entrypoint reads the cgroup limit and refuses outright below 2 GiB for
+    # 18c:
+    #
+    #     The container has not enough memory available to run Oracle Database XE.
+    #     There are currently only 1200 MiB available inside the container.
+    #
+    # The check is skipped entirely when the cgroup reports "max", which is what
+    # an absent mem_limit produces. So the choice is not "capped or uncapped" —
+    # it is "uncapped or not running". The caps on api and web below are what
+    # actually protects the machine: they are the two that would otherwise grow
+    # without bound, and Oracle's own SGA is fixed at startup rather than
+    # growing under load.
+    #
+    # The 4 GB swapfile from bootstrap-server.sh is what makes this survivable.
 
   api:
     volumes: !override
-      - ../api:/var/www/api
+      - ./api:/var/www/api
       - api-vendor:/var/www/api/vendor
       - api-storage:/var/www/api/storage
       - api-cache:/var/www/api/bootstrap/cache
-      - ../src:/var/www/src:ro
+      - ./src:/var/www/src:ro
     restart: unless-stopped
     mem_limit: 400m
 
@@ -64,9 +79,9 @@ services:
     ports: !override
       - "80:80"
     volumes: !override
-      - ../docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ../api/public:/var/www/api/public:ro
-      - ../dist:/var/www/dist:ro
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./api/public:/var/www/api/public:ro
+      - ./dist:/var/www/dist:ro
     restart: unless-stopped
     mem_limit: 128m
 
