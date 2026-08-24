@@ -36,13 +36,14 @@ authoritative: it recomputes every figure on write, and a client-supplied amount
 is input, never authority. The TypeScript copies stay because the browser draws
 coverage bars and ceiling warnings without a round trip.
 
-| TypeScript | PHP |
-| ---------- | --- |
-| `merge.ts` | `MergeService` |
-| `evaluate.ts` | `EvaluationService` |
-| `rates.ts` | `RatePlanService` |
-| `screening.ts` | `ScreeningService` |
-| `aggregate.ts` | `ReportService` |
+| TypeScript     | PHP                 |
+| -------------- | ------------------- |
+| `merge.ts`     | `MergeService`      |
+| `evaluate.ts`  | `EvaluationService` |
+| `rates.ts`     | `RatePlanService`   |
+| `screening.ts` | `ScreeningService`  |
+| `aggregate.ts` | `ReportService`     |
+| `funds.ts`     | `FundService`       |
 
 **Change one, change the other, and change both test suites.** Every one of the
 132 Vitest cases in those five modules is mirrored in Pest under
@@ -205,6 +206,25 @@ worth knowing because the reasoning is still load-bearing:
   set in bulk — `AwardRepository::activeForStudents`, `ApplicationScreener` at
   four queries for the whole queue — precisely so these stay pure. Do not push a
   query into them.
+- **Donor money is accounting, and never entitlement.** The donors module
+  records what was promised, what arrived, and which award each rupee paid for.
+  It does not change what any student is charged: `MergeService` must never
+  consult `FundService`, and no allocation may alter a coverage percentage. The
+  browser runs its own copy of the merge with no fund data at all, so a
+  dependency in that direction would make the server and the screen compute
+  different money — the exact failure §1b exists to prevent.
+- **The three fund states are derived, never stored.** Pledged, Received
+  (unassigned) and Received (assigned) are amounts rather than row statuses,
+  because one receipt can be part allocated and would have to sit in two
+  buckets at once. A status column would need maintaining by every receipt and
+  every allocation, and would drift. Same call as screening verdicts: what a
+  person decided is stored, what those decisions add up to is computed.
+- **Two guards hold the donors module to the rest of the system.** Assigning
+  more than a receipt holds is refused under a row lock, because no CHECK can
+  express "the sum of my children must not exceed my column" on Oracle. And
+  `undoBatch` — the one operation that hard-deletes awards — refuses a batch
+  whose awards carry donor money, rather than surfacing ORA-02292 from a
+  feature with no visible connection to donors.
 - **Documents on an application are still metadata only**; there is no file
   storage, and the storage column is absent rather than nullable so nothing
   half-works.
@@ -215,8 +235,7 @@ The Registrar Office's wider specification covers modules this repo does not
 have. Anything here is a deliberate gap, not an oversight:
 
 Financial Coverage (per-component coverage lines versioned by intake year),
-Sponsor Body (external funders, sharing the 100%-cap merge engine rather than
-duplicating it), Invoice (fee minus coverage, per term), and Report
-(Excel/PDF/print as one shared service). Student information is partly built:
+Invoice (fee minus coverage, per term), and Report (Excel/PDF/print as one
+shared service). Student information is partly built:
 the fields exist on `Student` and display on the profile, but the CRUD screen
 and the admin-managed lookup tables for quota and domicile do not.

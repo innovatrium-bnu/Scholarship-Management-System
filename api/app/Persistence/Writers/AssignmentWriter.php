@@ -7,6 +7,7 @@ namespace App\Persistence\Writers;
 use App\Domain\Data\DomainEvent;
 use App\Models\AssignmentBatch;
 use App\Models\Award;
+use App\Models\FundAllocation;
 use App\Models\Scholarship;
 use App\Persistence\DomainDate;
 use App\Persistence\Repositories\DomainEventRepository;
@@ -138,6 +139,47 @@ final class AssignmentWriter
      * no-op rather than a second set of events describing awards that are long
      * gone.
      */
+    /**
+     * Donor money assigned to the awards in this batch, in rupees.
+     *
+     * Undoing a batch deletes its awards outright — the one place this system
+     * hard-deletes anything, because an undone mis-click is not part of a
+     * student's record. Money that has been assigned is not a mis-click, and
+     * `fund_allocations.award_id` is `restrictOnDelete`, so the delete would
+     * fail at the database and surface as ORA-02292 from a feature with no
+     * visible connection to donors.
+     *
+     * Checked here so the caller can refuse in plain English instead.
+     */
+    public function allocatedFunds(AssignmentBatch $batch): float
+    {
+        return (float) FundAllocation::query()
+            ->active()
+            ->whereIn('award_id', $batch->awards()->pluck('id'))
+            ->sum('amount');
+    }
+
+    /**
+     * Whether any allocation row at all points at this batch's awards.
+     *
+     * Separate from `allocatedFunds` because the two answer different
+     * questions, and conflating them was a defect. `allocatedFunds` answers
+     * "how much donor money is riding on these awards", which only Active
+     * allocations do. This answers "will the database let the awards be
+     * deleted", and the foreign key does not care about status: a Released
+     * allocation is still a child row.
+     *
+     * So a batch whose allocation had been released passed the money check with
+     * zero and then died on ORA-02292 from `$award->delete()` — the exact
+     * failure the money check was written to prevent, one status away from it.
+     */
+    public function hasAllocationHistory(AssignmentBatch $batch): bool
+    {
+        return FundAllocation::query()
+            ->whereIn('award_id', $batch->awards()->pluck('id'))
+            ->exists();
+    }
+
     public function undo(AssignmentBatch $batch, string $actor): bool
     {
         if ($batch->undone) {

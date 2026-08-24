@@ -39,6 +39,26 @@ final readonly class DomainEvent
 
     public const APPLICATION_DECIDED = 'application.decided';
 
+    /* -- donors and funds -------------------------------------------------- */
+
+    public const DONOR_REGISTERED = 'donor.registered';
+
+    public const DONOR_UPDATED = 'donor.updated';
+
+    public const DONOR_ARCHIVED = 'donor.archived';
+
+    public const DONOR_RESTORED = 'donor.restored';
+
+    public const PLEDGE_RECORDED = 'pledge.recorded';
+
+    public const PLEDGE_CANCELLED = 'pledge.cancelled';
+
+    public const FUNDS_RECEIVED = 'funds.received';
+
+    public const FUNDS_ALLOCATED = 'funds.allocated';
+
+    public const FUNDS_RELEASED = 'funds.released';
+
     public function __construct(
         public string $kind,
         /** When this was recorded. */
@@ -67,5 +87,22 @@ final readonly class DomainEvent
         public ?string $outcome = null,
         /** application.decided: true when the filter decided it, not a person. */
         public ?bool $automatic = null,
+
+        /* -- donors and funds ---------------------------------------------- */
+
+        /** A column, because donor reporting groups by it. */
+        public ?string $donorId = null,
+        /**
+         * How much money this event moved, in rupees.
+         *
+         * Also a column. "How much donor money arrived this term" has to be a
+         * SUM, and a value a report needs must never live only inside the audit
+         * sentence — the rule this log exists to enforce.
+         */
+        public ?float $amount = null,
+        /** Payload: read back with the row, never grouped by. */
+        public ?string $pledgeId = null,
+        public ?string $donationId = null,
+        public ?string $allocationId = null,
     ) {}
 }

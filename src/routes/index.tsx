@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import {
   ResponsiveContainer,
@@ -21,6 +21,7 @@ import { useStore } from "@/lib/scholarship/store";
 import { computeMerge, waiverValuePKR } from "@/lib/scholarship/merge";
 import { pkr, shortSchool } from "@/components/scholarship/helpers";
 import { useReference } from "@/lib/scholarship/reference";
+import { receivable, received, renewalsDue, unassigned, overdue } from "@/lib/scholarship/funds";
 import {
   awardsGrantedBetween,
   awardsRevokedBetween,
@@ -53,6 +54,8 @@ import {
   TrendingUp,
   TrendingDown,
   Wallet,
+  HandCoins,
+  CalendarClock,
   SlidersHorizontal,
   RotateCcw,
 } from "lucide-react";
@@ -76,7 +79,26 @@ export const Route = createFileRoute("/")({
 const EMPTY: Filters = { ...ALL_OFF, status: "Active" };
 
 function Dashboard() {
-  const { students, awards, scholarships, events } = useStore();
+  const { students, awards, scholarships, events, pledges, donations, asOf } = useStore();
+
+  /*
+   * Donor figures, from funds.ts rather than from arithmetic written here.
+   *
+   * AGENTS.md §4a: dashboard figures come from tested functions. Two bugs lived
+   * in inline blocks on this very screen for exactly as long as nothing could
+   * test them, and both produced plausible numbers.
+   */
+  const donorMoney = useMemo(
+    () => ({
+      received: received(donations),
+      unassigned: unassigned(donations),
+      receivable: receivable(pledges, donations),
+      overdue: overdue(pledges, donations, asOf),
+    }),
+    [donations, pledges, asOf],
+  );
+
+  const donorRenewals = useMemo(() => renewalsDue(pledges, asOf), [pledges, asOf]);
   // Destructured under the old constant names so the uses below read as they
   // did when these were hardcoded arrays in seed.ts. They are tables now.
   const {
@@ -445,6 +467,70 @@ function Dashboard() {
             explain="The total value of every fee reduction currently in force, added up across all the students shown above."
           />
         </div>
+
+        {/* -------------------------------------------------- donor money -- */}
+        <SectionCard
+          title="Donor funds"
+          subtitle="Money from outside BNU: what has arrived, what it has paid for, and what is still promised."
+          action={
+            <Link
+              to="/donors"
+              className="text-[13px] font-medium text-primary underline-offset-2 hover:underline"
+            >
+              Open donors and funds →
+            </Link>
+          }
+        >
+          <div className="grid gap-4 sm:grid-cols-3">
+            <StatCard
+              icon={Wallet}
+              tone="teal"
+              label="Cash received"
+              value={pkr(donorMoney.received)}
+              hint="Money donors have actually sent"
+            />
+            <StatCard
+              icon={HandCoins}
+              tone="green"
+              label="Unassigned"
+              value={pkr(donorMoney.unassigned)}
+              hint="Received, and not yet given to a student"
+              to="/donors"
+            />
+            <StatCard
+              icon={CalendarClock}
+              tone="coral"
+              label="Still to come"
+              value={pkr(donorMoney.receivable)}
+              hint="Pledged but not yet received — this is not cash"
+            />
+          </div>
+
+          {/*
+            Stated in words, because the acceptance criterion is that the two
+            are clearly separated and a reader should not have to infer it from
+            tile colours. It is also what stops the next person adding a
+            "total donor funds" tile that sums a promise with a payment.
+          */}
+          <p className="mt-3 text-[13px] text-muted-foreground">
+            The first two are money BNU holds. The third is money it has been promised. They are
+            never added together.
+            {donorMoney.overdue > 0
+              ? ` ${pkr(donorMoney.overdue)} of what is still to come is already past its due date.`
+              : ""}
+          </p>
+
+          {donorRenewals.length > 0 ? (
+            <p className="mt-2 text-[13px] font-medium text-foreground">
+              {donorRenewals.length} commitment{donorRenewals.length === 1 ? "" : "s"} due for
+              renewal.{" "}
+              <Link to="/donors" className="text-primary underline-offset-2 hover:underline">
+                See which
+              </Link>
+              .
+            </p>
+          ) : null}
+        </SectionCard>
 
         {/* ------------------------------------------------------- charts -- */}
         <StepHeading

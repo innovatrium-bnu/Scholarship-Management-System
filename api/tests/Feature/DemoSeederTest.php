@@ -233,9 +233,30 @@ it('writes an event and an audit line for everything that happened', function ()
 
     expect($grants)->toBe(Award::count())
         ->and($revocations)->toBe(DB::table('revocations')->count())
-        ->and($decisions)->toBe(DB::table('application_decisions')->count())
-        ->and(DB::table('audit_entries')->count())
-        ->toBe($grants + $revocations + $decisions);
+        ->and($decisions)->toBe(DB::table('application_decisions')->count());
+
+    /*
+     * One audit line per event, stated as the relationship rather than as a
+     * sum of the kinds that happen to exist today.
+     *
+     * It used to be spelled out as grants + revocations + decisions, which
+     * broke the moment the donors module added kinds of its own — not because
+     * the invariant failed but because the arithmetic listing it was
+     * incomplete. Every mutation writes both logs; that is the claim worth
+     * pinning, and it keeps holding as kinds are added.
+     */
+    expect(DB::table('audit_entries')->count())
+        ->toBe(DB::table('domain_events')->count());
+});
+
+it('writes both logs for donor money as well', function () {
+    $donorEvents = DB::table('domain_events')
+        ->whereIn('kind', ['donor.registered', 'pledge.recorded', 'funds.received', 'funds.allocated'])
+        ->count();
+
+    expect($donorEvents)->toBeGreaterThan(0)
+        ->and(DB::table('audit_entries')->where('entity_type', 'Donor')->count())
+        ->toBe(DB::table('domain_events')->whereNotNull('donor_id')->count());
 });
 
 /* -- the guards ------------------------------------------------------------- */

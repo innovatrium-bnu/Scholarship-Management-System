@@ -85,6 +85,16 @@ class ScholarshipRequest extends FormRequest
             'mayExceedCeiling' => ['sometimes', 'boolean'],
 
             /*
+             * Optional, and it never replaces donorName.
+             *
+             * A client that has never heard of donors behaves exactly as it
+             * did before, which is what makes this additive. When it is sent,
+             * the controller overwrites donor_name from the donor row so the
+             * link and its display fallback cannot disagree.
+             */
+            'donorId' => ['nullable', 'string', Rule::exists('donors', 'id')],
+
+            /*
              * The two child collections. Sent whole, replaced whole.
              *
              * A scholarship is never versioned, so there is no history to
@@ -226,6 +236,7 @@ class ScholarshipRequest extends FormRequest
             'quotaPerCohort' => 'quota_per_cohort',
             'effectiveFrom' => 'effective_from',
             'mayExceedCeiling' => 'may_exceed_ceiling',
+            'donorId' => 'donor_id',
         ];
 
         $columns = [];

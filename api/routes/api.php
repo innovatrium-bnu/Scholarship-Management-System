@@ -7,9 +7,11 @@ use App\Http\Controllers\Api\AuditController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AwardController;
 use App\Http\Controllers\Api\CriteriaController;
+use App\Http\Controllers\Api\DonorController;
 use App\Http\Controllers\Api\EligibilityController;
 use App\Http\Controllers\Api\EventController;
 use App\Http\Controllers\Api\FeeHeadController;
+use App\Http\Controllers\Api\FundController;
 use App\Http\Controllers\Api\ReferenceController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ScholarshipController;
@@ -154,6 +156,53 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('can:'.RoleMatrix::APPLICATIONS_DECIDE);
     Route::post('applications/{application}/reopen', [ApplicationController::class, 'reopen'])
         ->middleware('can:'.RoleMatrix::APPLICATIONS_DECIDE);
+
+    /* -- Donors and funds -------------------------------------------------- */
+
+    /*
+     * Reads name donors.read explicitly rather than resting on auth:sanctum.
+     * Every role holds it today, so the two are equivalent — but donor finances
+     * are the likeliest thing a role added later is scoped out of, and the
+     * applications queue already sets this precedent for the same reason.
+     */
+    Route::get('donors', [DonorController::class, 'index'])
+        ->middleware('can:'.RoleMatrix::DONORS_READ);
+
+    // Before {donor}, or "summary" is read as an id.
+    Route::get('funds/summary', [FundController::class, 'summary'])
+        ->middleware('can:'.RoleMatrix::DONORS_READ);
+
+    Route::post('donors', [DonorController::class, 'store'])
+        ->middleware('can:'.RoleMatrix::DONORS_MANAGE);
+
+    Route::get('donors/{donor}', [DonorController::class, 'show'])
+        ->middleware('can:'.RoleMatrix::DONORS_READ);
+
+    Route::patch('donors/{donor}', [DonorController::class, 'update'])
+        ->middleware('can:'.RoleMatrix::DONORS_MANAGE);
+    Route::post('donors/{donor}/archive', [DonorController::class, 'archive'])
+        ->middleware('can:'.RoleMatrix::DONORS_MANAGE);
+    Route::post('donors/{donor}/restore', [DonorController::class, 'restore'])
+        ->middleware('can:'.RoleMatrix::DONORS_MANAGE);
+
+    Route::post('donors/{donor}/pledges', [DonorController::class, 'storePledge'])
+        ->middleware('can:'.RoleMatrix::DONORS_MANAGE);
+    Route::post('pledges/{pledge}/cancel', [DonorController::class, 'cancelPledge'])
+        ->middleware('can:'.RoleMatrix::DONORS_MANAGE);
+
+    Route::post('donors/{donor}/donations', [FundController::class, 'store'])
+        ->middleware('can:'.RoleMatrix::DONORS_MANAGE);
+
+    Route::post('donations/{donation}/allocations', [FundController::class, 'allocate'])
+        ->middleware('can:'.RoleMatrix::DONORS_MANAGE);
+
+    /*
+     * POST, not DELETE. Releasing is not a deletion — the row survives with a
+     * reason and the name of whoever released it — and it carries a body, which
+     * DELETE has nowhere good to put.
+     */
+    Route::post('allocations/{allocation}/release', [FundController::class, 'release'])
+        ->middleware('can:'.RoleMatrix::DONORS_MANAGE);
 
     /* -- Reporting and history -------------------------------------------- */
 

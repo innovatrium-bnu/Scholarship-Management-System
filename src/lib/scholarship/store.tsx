@@ -8,8 +8,12 @@ import type {
   Award,
   AuditEntry,
   AssignmentBatch,
+  Donation,
+  Donor,
+  DonorFunding,
   EligibilityCriteria,
   NeedApplication,
+  Pledge,
   Role,
   Scholarship,
   Student,
@@ -68,6 +72,19 @@ interface StoreState {
    * is the first question this could answer honestly only once the data
    * outlived the page.
    */
+  donors: Donor[];
+  pledges: Pledge[];
+  donations: Donation[];
+  /** One rollup per donor, computed server-side. See funds.ts. */
+  funding: DonorFunding[];
+  /**
+   * The server's today, in YYYY-MM-DD.
+   *
+   * Every overdue and renewal answer is relative to a date, and a browser whose
+   * clock is a day out would compute a different set from the same rows. One
+   * date, decided by the server, so both sides agree.
+   */
+  asOf: string;
   historyStartedAt: string;
   /**
    * Who is using the system. The signed-in user's role — it decides what
@@ -77,6 +94,46 @@ interface StoreState {
 }
 
 interface StoreCtx extends StoreState {
+  /* -- donors and funds -------------------------------------------------- */
+
+  addDonor: (donor: Omit<Donor, "id" | "status">, reason: string) => Promise<void>;
+  updateDonor: (id: string, patch: Partial<Donor>, reason: string) => Promise<void>;
+  archiveDonor: (id: string, reason: string) => Promise<void>;
+  restoreDonor: (id: string, reason: string) => Promise<void>;
+  recordPledge: (
+    donorId: string,
+    pledge: {
+      totalAmount: number;
+      termYears: number;
+      startsOn: string;
+      scholarshipId?: string;
+      reference?: string;
+      renewalNoticeDays?: number;
+    },
+    reason: string,
+  ) => Promise<void>;
+  cancelPledge: (pledgeId: string, reason: string) => Promise<void>;
+  recordDonation: (
+    donorId: string,
+    donation: {
+      amount: number;
+      receivedOn: string;
+      method: Donation["method"];
+      pledgeId?: string;
+      instalmentId?: string;
+      reference?: string;
+    },
+    reason: string,
+  ) => Promise<void>;
+  /** Assign part of a receipt to one award. The server refuses an overspend. */
+  allocateFunds: (
+    donationId: string,
+    awardId: string,
+    amount: number,
+    reason: string,
+  ) => Promise<void>;
+  releaseAllocation: (allocationId: string, reason: string) => Promise<void>;
+
   addScholarship: (s: Scholarship, reason: string) => Promise<void>;
   updateScholarship: (id: string, patch: Partial<Scholarship>, reason: string) => Promise<void>;
   archiveScholarship: (id: string, endExisting: boolean, semester: string) => Promise<void>;
@@ -162,6 +219,7 @@ const keys = {
   applications: ["applications"] as const,
   criteria: ["criteria"] as const,
   reference: ["reference"] as const,
+  donors: ["donors"] as const,
 };
 
 interface Page<T> {
@@ -224,6 +282,21 @@ interface Reference {
   feeHeads: string[];
 }
 
+/**
+ * Everything the donors module needs, in one request.
+ *
+ * Three collections rather than a nested graph, because every fund figure is a
+ * fold over pledges and receipts together — and because the screens filter and
+ * total them in the browser with funds.ts, which takes them separately.
+ */
+interface DonorsPayload {
+  donors: Donor[];
+  pledges: Pledge[];
+  donations: Donation[];
+  funding: DonorFunding[];
+  asOf: string;
+}
+
 export function ScholarshipProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const { user } = useSession();
@@ -247,6 +320,7 @@ export function ScholarshipProvider({ children }: { children: ReactNode }) {
       },
       { queryKey: keys.criteria, queryFn: unwrap<EligibilityCriteria[]>("/criteria"), enabled },
       { queryKey: keys.reference, queryFn: () => api.get<Reference>("/reference"), enabled },
+      { queryKey: keys.donors, queryFn: unwrap<DonorsPayload>("/donors"), enabled },
     ],
   });
 
@@ -260,6 +334,7 @@ export function ScholarshipProvider({ children }: { children: ReactNode }) {
     applications,
     criteria,
     reference,
+    donors,
   ] = results;
 
   const value = useStoreValue({
@@ -280,6 +355,13 @@ export function ScholarshipProvider({ children }: { children: ReactNode }) {
     applications: (applications.data ?? []).map((entry) => entry.application),
     criteria: criteria.data ?? [],
     feeHeads: reference.data?.feeHeads ?? [],
+    donors: donors.data?.donors ?? [],
+    pledges: donors.data?.pledges ?? [],
+    donations: donors.data?.donations ?? [],
+    funding: donors.data?.funding ?? [],
+    // Falls back to the browser's date only before the first load resolves, by
+    // which point no screen is rendering a figure anyway.
+    asOf: donors.data?.asOf ?? new Date().toISOString().slice(0, 10),
   });
 
   if (!enabled) {
@@ -399,8 +481,62 @@ function useStoreValue(inputs: StoreInputs): StoreCtx {
       applications: inputs.applications,
       criteria: inputs.criteria,
       events: inputs.events,
+      donors: inputs.donors,
+      pledges: inputs.pledges,
+      donations: inputs.donations,
+      funding: inputs.funding,
+      asOf: inputs.asOf,
       historyStartedAt,
       role,
+
+      /* -- donors and funds ------------------------------------------- */
+
+      addDonor: async (donor, reason) => {
+        await api.post("/donors", { ...donor, reason });
+        await refresh(keys.donors);
+      },
+
+      updateDonor: async (id, patch, reason) => {
+        await api.patch(`/donors/${id}`, { ...patch, reason });
+        await refresh(keys.donors);
+      },
+
+      archiveDonor: async (id, reason) => {
+        await api.post(`/donors/${id}/archive`, { reason });
+        await refresh(keys.donors);
+      },
+
+      restoreDonor: async (id, reason) => {
+        await api.post(`/donors/${id}/restore`, { reason });
+        await refresh(keys.donors);
+      },
+
+      recordPledge: async (donorId, pledge, reason) => {
+        await api.post(`/donors/${donorId}/pledges`, { ...pledge, reason });
+        await refresh(keys.donors);
+      },
+
+      cancelPledge: async (pledgeId, reason) => {
+        await api.post(`/pledges/${pledgeId}/cancel`, { reason });
+        await refresh(keys.donors);
+      },
+
+      recordDonation: async (donorId, donation, reason) => {
+        await api.post(`/donors/${donorId}/donations`, { ...donation, reason });
+        await refresh(keys.donors);
+      },
+
+      allocateFunds: async (donationId, awardId, amount, reason) => {
+        await api.post(`/donations/${donationId}/allocations`, { awardId, amount, reason });
+        // Awards too: the student page and the award detail both name who is
+        // paying, so they are stale the moment this lands.
+        await refresh(keys.donors, keys.awards);
+      },
+
+      releaseAllocation: async (allocationId, reason) => {
+        await api.post(`/allocations/${allocationId}/release`, { reason });
+        await refresh(keys.donors, keys.awards);
+      },
 
       addScholarship: async (scholarship, reason) => {
         // The id is the server's to mint. The prototype generated one here

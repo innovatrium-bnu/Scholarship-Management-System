@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ScholarshipRequest;
 use App\Http\Resources\DomainJson;
 use App\Http\Rules\TermOrDate;
+use App\Models\Donor;
 use App\Models\Scholarship;
 use App\Persistence\Mappers\ScholarshipMapper;
 use App\Persistence\Repositories\ScholarshipRepository;
@@ -79,7 +80,7 @@ final class ScholarshipController extends Controller
     public function store(ScholarshipRequest $request): JsonResponse
     {
         $scholarship = DB::transaction(function () use ($request) {
-            $columns = $request->columns();
+            $columns = $this->withDonorName($request->columns());
             $columns['precedence'] = (int) (Scholarship::query()->max('precedence') ?? -1) + 1;
             $columns['status'] = 'Active';
 
@@ -130,7 +131,7 @@ final class ScholarshipController extends Controller
     public function update(ScholarshipRequest $request, Scholarship $scholarship): JsonResponse
     {
         DB::transaction(function () use ($request, $scholarship) {
-            $columns = $request->columns();
+            $columns = $this->withDonorName($request->columns(), $scholarship);
             $before = $scholarship->only(array_keys($columns));
 
             /*
@@ -293,5 +294,43 @@ final class ScholarshipController extends Controller
         $this->writer->reorder($validated['order'], Actor::from($request));
 
         return response()->json(['data' => DomainJson::encodeList($this->scholarships->all())]);
+    }
+
+    /**
+     * When a donor is linked, the name comes from the donor record.
+     *
+     * `donor_name` predates the donors module and is still what four screens
+     * read, so it stays — but with a link present there must be one source of
+     * truth for the name. Taking it from the donor row here means the display
+     * fallback can never drift from the record it falls back from, however the
+     * client filled the form.
+     *
+     * @param  array<string, mixed>  $columns
+     * @return array<string, mixed>
+     */
+    private function withDonorName(array $columns, ?Scholarship $existing = null): array
+    {
+        /*
+         * The link already on the row counts, not only the one in the request.
+         *
+         * A PATCH that changes the name and says nothing about the donor used
+         * to slip past here, because `donor_id` was absent from `$columns` and
+         * this returned early — leaving a scholarship linked to one donor and
+         * displaying the name of another, which is precisely what taking the
+         * name from the record is supposed to make impossible.
+         */
+        $donorId = $columns['donor_id'] ?? $existing?->donor_id;
+
+        if ($donorId === null) {
+            return $columns;
+        }
+
+        $name = Donor::query()->whereKey($donorId)->value('name');
+
+        if ($name !== null) {
+            $columns['donor_name'] = $name;
+        }
+
+        return $columns;
     }
 }

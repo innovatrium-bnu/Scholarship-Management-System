@@ -68,5 +68,13 @@ final readonly class Scholarship
         public ?string $donorName = null,
         public ?int $quotaPerCohort = null,
         public bool $mayExceedCeiling = false,
+        /**
+         * The donor record funding this, once one has been matched.
+         *
+         * Optional and staying that way: most scholarships are internally
+         * funded, and a donor-funded one created before the donors module
+         * has a name and no id. donorName remains the display fallback.
+         */
+        public ?string $donorId = null,
     ) {}
 }

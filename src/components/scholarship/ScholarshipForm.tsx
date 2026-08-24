@@ -95,7 +95,7 @@ export function ScholarshipForm({
   onSubmit: (data: Scholarship, reason: string) => void;
   onCancel: () => void;
 }) {
-  const { feeHeads, addFeeHead } = useStore();
+  const { feeHeads, addFeeHead, donors } = useStore();
   // Destructured under the old constant names so the uses below read as they
   // did when these were hardcoded arrays in seed.ts. They are tables now.
   const {
@@ -324,14 +324,59 @@ export function ScholarshipForm({
                 </Field>
               </div>
               {data.fundingSource === "Donor" && (
-                <Field label="Donor's name">
-                  <Input
-                    className="h-11 rounded-xl"
-                    value={data.donorName ?? ""}
-                    onChange={(e) => set("donorName", e.target.value)}
-                    placeholder="e.g. Ahmed Family Trust"
-                  />
-                </Field>
+                <div className="space-y-4">
+                  <Field
+                    label="Which donor"
+                    explain="Linking to a donor record is what lets the Donors screen answer what this funder has promised, sent, and still owes. A scholarship recorded before that donor existed can be left unlinked."
+                  >
+                    <Select
+                      value={data.donorId ?? "unlinked"}
+                      onValueChange={(v) => {
+                        if (v === "unlinked") {
+                          set("donorId", undefined);
+
+                          return;
+                        }
+
+                        set("donorId", v);
+
+                        // The name follows the link, so the display fallback can
+                        // never disagree with the record it falls back from. The
+                        // server sets it again on write for the same reason.
+                        const picked = donors.find((donor) => donor.id === v);
+                        if (picked) set("donorName", picked.name);
+                      }}
+                    >
+                      <SelectTrigger className="h-11 rounded-xl">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unlinked">Not linked to a donor record</SelectItem>
+                        {donors
+                          .filter((donor) => donor.status === "Active" || donor.id === data.donorId)
+                          .map((donor) => (
+                            <SelectItem key={donor.id} value={donor.id}>
+                              {donor.name}
+                              {donor.status === "Archived" ? " (archived)" : ""}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+
+                  <Field
+                    label="Donor's name"
+                    explain="What appears on screens that only need the name. When a donor record is linked, this comes from it."
+                  >
+                    <Input
+                      className="h-11 rounded-xl"
+                      value={data.donorName ?? ""}
+                      onChange={(e) => set("donorName", e.target.value)}
+                      placeholder="e.g. Ahmed Family Trust"
+                      readOnly={data.donorId !== undefined}
+                    />
+                  </Field>
+                </div>
               )}
             </div>
           )}

@@ -54,6 +54,7 @@ import {
   UserPlus,
   XCircle,
   GraduationCap,
+  HandCoins,
   Wallet,
   Percent,
   Check,
@@ -114,10 +115,48 @@ function statusOf(components: MergedAward["components"]) {
 function StudentDetail() {
   const { regNo } = useParams({ from: "/students/$regNo" });
   const nav = useNavigate();
-  const { students, awards, scholarships, addAward, revokeAward, role } = useStore();
+  const { students, awards, scholarships, donors, donations, addAward, revokeAward, role } =
+    useStore();
   // Moving money is awards.manage. Data Entry may edit a student and may not
   // give them a scholarship, and the API enforces exactly that.
   const mayAward = can(role, "awards.manage");
+
+  /**
+   * Which donor's cash actually paid for each award — FR-02, from this end.
+   *
+   * The card used to show `scholarship.donorName`, which is the donor behind
+   * the *scholarship* and is empty on every internally-funded one. So a student
+   * holding an internal award that a donor's receipt had been allocated to
+   * showed nothing at all, and the sponsorship was readable only from the donor
+   * side. This reads the allocations, which is where the money actually is.
+   */
+  const fundedBy = useMemo(() => {
+    const donorName = new Map(donors.map((donor) => [donor.id, donor.name]));
+    const byAward = new Map<string, { id: string; name: string; amount: number }[]>();
+
+    for (const donation of donations) {
+      for (const allocation of donation.allocations) {
+        if (allocation.status !== "Active") continue;
+
+        const already = byAward.get(allocation.awardId) ?? [];
+        const seen = already.find((entry) => entry.id === donation.donorId);
+
+        if (seen) {
+          seen.amount += allocation.amount;
+        } else {
+          already.push({
+            id: donation.donorId,
+            name: donorName.get(donation.donorId) ?? "A donor",
+            amount: allocation.amount,
+          });
+        }
+
+        byAward.set(allocation.awardId, already);
+      }
+    }
+
+    return byAward;
+  }, [donors, donations]);
   const student = students.find((s) => s.regNo === regNo);
   const screened = useScreenedApplications();
   const theirApplications = useMemo(
@@ -584,6 +623,7 @@ function StudentDetail() {
                           restored={restoredIds.has(m.award.id)}
                           onRevoke={mayAward ? () => setRevokeFor(m.award) : undefined}
                           precedence={precedenceOf(scholarships, m.scholarship.id)}
+                          fundedBy={fundedBy.get(m.award.id) ?? []}
                         />
                       ))}
                     </div>
@@ -747,6 +787,7 @@ function AwardCard({
   restored,
   onRevoke,
   precedence,
+  fundedBy,
 }: {
   merged: MergedAward;
   student: { tuitionFee: number; hostelFee: number; messFee: number; otherFee: number };
@@ -754,6 +795,8 @@ function AwardCard({
   /** Absent for a role that may not move money, which hides "Take it back". */
   onRevoke?: () => void;
   precedence: number;
+  /** Donors whose receipts have been assigned to this award. */
+  fundedBy: { id: string; name: string; amount: number }[];
 }) {
   const { award, scholarship, components } = merged;
   const status = statusOf(components);
@@ -789,6 +832,32 @@ function AwardCard({
               </>
             ) : null}
           </div>
+
+          {/*
+            Paid for by, from the allocations rather than from the scholarship.
+            A scholarship can be internally funded and still have a donor's
+            receipt assigned to one of its awards, which is the case the
+            scholarship's own donorName cannot describe.
+          */}
+          {fundedBy.length > 0 ? (
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
+              <HandCoins className="h-3.5 w-3.5" />
+              <span>Paid for with money from</span>
+              {fundedBy.map((donor, i) => (
+                <span key={donor.id}>
+                  {i > 0 ? <span className="mr-1.5">·</span> : null}
+                  <Link
+                    to="/donors/$id"
+                    params={{ id: donor.id }}
+                    className="font-medium text-foreground underline-offset-2 hover:underline"
+                  >
+                    {donor.name}
+                  </Link>{" "}
+                  ({pkr(donor.amount)})
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
         <StatusPill tone={status.tone} icon={status.tone === "green" ? Check : undefined}>
           {status.label}

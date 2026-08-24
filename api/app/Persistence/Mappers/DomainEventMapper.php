@@ -47,6 +47,11 @@ final class DomainEventMapper
             applicationId: $record->application_id,
             outcome: $payload['outcome'] ?? null,
             automatic: $payload['automatic'] ?? null,
+            donorId: $record->donor_id,
+            amount: $record->amount_pkr,
+            pledgeId: $payload['pledgeId'] ?? null,
+            donationId: $payload['donationId'] ?? null,
+            allocationId: $payload['allocationId'] ?? null,
         );
     }
 
@@ -89,6 +94,9 @@ final class DomainEventMapper
             'reason' => $event->reason,
             'outcome' => $event->outcome,
             'automatic' => $event->automatic,
+            'pledgeId' => $event->pledgeId,
+            'donationId' => $event->donationId,
+            'allocationId' => $event->allocationId,
         ], fn ($value) => $value !== null);
 
         return [
@@ -97,6 +105,8 @@ final class DomainEventMapper
             'semester' => $event->semester,
             'student_reg_no' => $event->studentRegNo,
             'scholarship_id' => $event->scholarshipId,
+            'donor_id' => $event->donorId,
+            'amount_pkr' => $event->amount,
             'award_id' => $event->awardId,
             'application_id' => $event->applicationId,
             'batch_id' => $event->batchId,

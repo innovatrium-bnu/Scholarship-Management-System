@@ -42,10 +42,11 @@ it('logs in with the right credentials and says what the role may do', function 
     expect($response->json('data.role'))->toBe(RoleMatrix::DATA_ENTRY)
         // Sent so the SPA can hide controls the API would refuse anyway. It is
         // never the check itself.
-        ->and($response->json('data.capabilities'))->toBe([
-            RoleMatrix::APPLICATIONS_READ,
-            RoleMatrix::STUDENTS_EDIT,
-        ])
+        // Read from the matrix rather than restated, so a capability added to
+        // a role does not fail here for no reason. What this test is about is
+        // that the list reaches the client at all, in the matrix's own order.
+        ->and($response->json('data.capabilities'))
+        ->toBe(RoleMatrix::capabilitiesFor(RoleMatrix::DATA_ENTRY))
         // The hash must not leave the server, cast or not.
         ->and($response->json('data'))->not->toHaveKey('password');
 
@@ -112,7 +113,8 @@ it('reports the signed-in user from me', function () {
     $response->assertOk();
 
     expect($response->json('data.role'))->toBe(RoleMatrix::REPORTING)
-        ->and($response->json('data.capabilities'))->toBe([RoleMatrix::APPLICATIONS_READ]);
+        ->and($response->json('data.capabilities'))
+        ->toBe(RoleMatrix::capabilitiesFor(RoleMatrix::REPORTING));
 });
 
 /* -- Enforcement ---------------------------------------------------------- */

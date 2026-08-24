@@ -22,7 +22,7 @@ use Illuminate\Database\Eloquent\Builder;
  * term without resolving a date to a term at query time.
  */
 #[Fillable([
-    'kind', 'at', 'semester', 'student_reg_no', 'scholarship_id',
+    'kind', 'at', 'semester', 'student_reg_no', 'scholarship_id', 'donor_id', 'amount_pkr',
     'award_id', 'application_id', 'batch_id', 'payload',
 ])]
 class DomainEvent extends Model
@@ -35,6 +35,8 @@ class DomainEvent extends Model
     {
         return [
             'at' => 'datetime',
+            // Float, never decimal:2 — decimal:2 returns strings.
+            'amount_pkr' => 'float',
             'payload' => 'array',
         ];
     }

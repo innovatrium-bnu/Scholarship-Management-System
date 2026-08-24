@@ -28,6 +28,16 @@ export type Capability =
   | "awards.manage"
   /** Create, change, or retire a scholarship. */
   | "scholarships.edit"
+  /** Open the donors module and read pledges, receipts and allocations. */
+  | "donors.read"
+  /**
+   * Record a pledge or a receipt, and move money on or off an award.
+   *
+   * Data Entry deliberately does not hold this. Recording a receipt is saying
+   * money arrived and allocating it is deciding which student it paid for —
+   * both are the deciding half of the split this matrix already draws.
+   */
+  | "donors.manage"
   /**
    * Create accounts and set what role they hold.
    *
@@ -48,6 +58,8 @@ const MATRIX: Record<Role, Capability[]> = {
     "criteria.edit",
     "awards.manage",
     "scholarships.edit",
+    "donors.read",
+    "donors.manage",
     "users.manage",
   ],
   Admin: [
@@ -57,15 +69,17 @@ const MATRIX: Record<Role, Capability[]> = {
     "criteria.edit",
     "awards.manage",
     "scholarships.edit",
+    "donors.read",
+    "donors.manage",
   ],
   /* Data Entry keeps records straight and prepares applications for review. It
      deliberately stops short of `applications.decide` and `awards.manage`:
      entering the numbers a decision rests on and making the decision are the
      two halves that have to stay in different hands. */
-  "Data Entry": ["applications.read", "students.edit"],
+  "Data Entry": ["applications.read", "students.edit", "donors.read"],
   /* Reporting is read-only by construction. Every read route is gated on being
      signed in, so this list is what it may do beyond looking. */
-  Reporting: ["applications.read"],
+  Reporting: ["applications.read", "donors.read"],
 };
 
 export function can(role: Role, capability: Capability): boolean {

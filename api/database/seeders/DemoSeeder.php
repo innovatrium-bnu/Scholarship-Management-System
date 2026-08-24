@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use Database\Seeders\Demo\ApplicationGenerator;
 use Database\Seeders\Demo\AwardGenerator;
+use Database\Seeders\Demo\DonorGenerator;
 use Database\Seeders\Demo\Row;
 use Database\Seeders\Demo\ScholarshipCatalogue;
 use Database\Seeders\Demo\StudentGenerator;
@@ -89,15 +90,23 @@ class DemoSeeder extends Seeder
         'application_decisions',
         'application_documents',
         'need_applications',
+        // Before awards and before donations: fund_allocations points at both.
+        'fund_allocations',
         'revocations',
         'award_components',
         'awards',
         'assignment_batches',
+        // Receipts before the pledges and donors they point at.
+        'donations',
+        'pledge_instalments',
+        'pledges',
         'cgpa_thresholds',
         'eligibility_criteria',
         'scholarship_rules',
         'coverage_lines',
         'scholarships',
+        // After scholarships, which carry a donor_id.
+        'donors',
         'students',
         'domain_events',
         'audit_entries',
@@ -130,6 +139,27 @@ class DemoSeeder extends Seeder
         ))->build($students);
 
         /*
+         * Donors come last because they allocate against awards that already
+         * exist, and they hand back the scholarship links rather than reaching
+         * into rows another generator owns.
+         *
+         * The link migration backfills a donor per distinct donor_name already
+         * in the scholarships table, which is right for a real database and does
+         * nothing here: migrations run before seeders, so there is no
+         * scholarship yet to read a name from.
+         */
+        $donorGenerator = new DonorGenerator($ids, $awardTables['awards']);
+        $donorTables = $donorGenerator->build();
+
+        $links = $donorGenerator->scholarshipLinks();
+
+        foreach ($scholarshipTables['scholarships'] as $index => $scholarship) {
+            if (isset($links[$scholarship['id']])) {
+                $scholarshipTables['scholarships'][$index]['donor_id'] = $links[$scholarship['id']];
+            }
+        }
+
+        /*
          * Merged rather than written in three passes, because domain_events and
          * audit_entries are appended to by both the award and application
          * generators. Two inserts into one table is not wrong, but one list per
@@ -138,7 +168,7 @@ class DemoSeeder extends Seeder
          */
         $tables = ['students' => $students] + $scholarshipTables;
 
-        foreach ([$awardTables, $applicationTables] as $group) {
+        foreach ([$awardTables, $applicationTables, $donorTables] as $group) {
             foreach ($group as $table => $rows) {
                 $tables[$table] = array_merge($tables[$table] ?? [], $rows);
             }

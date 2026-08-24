@@ -32,7 +32,7 @@ export function AuditPanel({
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  entityType?: "Scholarship" | "Student" | "Award";
+  entityType?: "Scholarship" | "Student" | "Award" | "Donor";
   entityId?: string;
   studentRegNo?: string;
 }) {
