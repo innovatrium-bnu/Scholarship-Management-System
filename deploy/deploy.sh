@@ -11,6 +11,9 @@
 #     REMOTE_DIR   default /srv/bnu-scholarships
 #     SEED         default 0               set to 1 to seed the demo register
 #     FRESH        default 0               set to 1 to DROP AND REBUILD the schema
+#     REPLACE      default 0               set to 1 to clear and rebuild the demo
+#                                          register (needs SEED=1; deletes any
+#                                          changes made through the interface)
 #
 # -----------------------------------------------------------------------------
 # WHY THE SPA IS BUILT HERE AND NOT THERE
@@ -27,6 +30,7 @@ SSH_HOST="${SSH_HOST:-bnu-lightsail}"
 REMOTE_DIR="${REMOTE_DIR:-/srv/bnu-scholarships}"
 SEED="${SEED:-0}"
 FRESH="${FRESH:-0}"
+REPLACE="${REPLACE:-0}"
 
 log() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 warn() { printf '\033[1;33m    %s\033[0m\n' "$*"; }
@@ -324,8 +328,20 @@ if [[ "$SEED" == "1" || "$FRESH" == "1" ]]; then
     # DemoSeeder refuses to run when APP_ENV=production, which is the default
     # in .env.example and the right default. Seeding the demo register is an
     # explicit request, so it is made explicitly.
-    echo "    seeding the demo register"
+    #
+    # DEMO_REPLACE is a second, separate guard inside the seeder: it will not
+    # add to a register that already holds students, because doing so would
+    # double every row rather than refresh anything. REPLACE=1 is what says
+    # "clear the demo tables and rebuild them", and it is deliberately not
+    # implied by SEED=1 — the difference between adding demo data to an empty
+    # database and deleting what is in a populated one is worth having to type.
+    #
+    # The generator is deterministic, so a replace rebuilds the identical
+    # register. What it does not preserve is anything a person did through the
+    # interface since the last seed.
+    echo "    seeding the demo register${REPLACE:+ (replacing the existing one)}"
     \$COMPOSE exec -T -e APP_ENV=local -e SEED_USER_PASSWORD=\${SEED_USER_PASSWORD:-changeme} \
+        -e DEMO_REPLACE=${REPLACE:-0} \
         api php artisan db:seed --force </dev/null
 fi
 
