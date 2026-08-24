@@ -14,6 +14,7 @@ import {
   ClipboardCheck,
   ShieldCheck,
   Check,
+  Landmark,
   LogOut,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -117,6 +118,19 @@ const NAV: { heading: string; items: NavItem[] }[] = [
     ],
   },
   {
+    heading: "Donors & funds",
+    items: [
+      {
+        to: "/donors",
+        label: "Donors and funds",
+        hint: "Who funds us, what has arrived, what is unassigned",
+        icon: Landmark,
+        exact: true,
+        needs: "donors.read",
+      },
+    ],
+  },
+  {
     heading: "Setup",
     items: [
       {
@@ -153,6 +167,7 @@ function crumbFor(pathname: string): string {
       }
     }
   }
+  if (pathname.startsWith("/donors/")) return "Donors and funds";
   if (pathname.startsWith("/students/")) return "Students";
   if (pathname.startsWith("/scholarships/")) return "All scholarships";
   return "Home";

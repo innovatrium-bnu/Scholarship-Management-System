@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Domain\FundService;
 use App\Http\Actor;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AssignmentRequest;
@@ -124,6 +125,50 @@ final class AssignmentController extends Controller
      */
     public function destroy(Request $request, AssignmentBatch $batch): JsonResponse
     {
+        /*
+         * Refused while donor money is riding on these awards.
+         *
+         * Undoing deletes the awards, and an allocation points at one with
+         * restrictOnDelete — so without this the request would surface as an
+         * ORA-02292 from the database rather than as an answer. Money that has
+         * been assigned to a student is not a mis-click, and releasing it is a
+         * decision with a reason attached, taken on the donors screen.
+         */
+        $allocated = $this->writer->allocatedFunds($batch);
+
+        if ($allocated > FundService::TOLERANCE) {
+            return response()->json([
+                'message' => sprintf(
+                    'This batch cannot be undone. PKR %s of donor funds has been assigned to its '
+                    .'awards. Release those allocations on the Donors screen first.',
+                    number_format($allocated, 2),
+                ),
+            ], 409);
+        }
+
+        /*
+         * And refused again when the money has already been released.
+         *
+         * Releasing sets a status; it does not remove the row, because the
+         * money was assigned to a student at a point in time and reassigning it
+         * later does not make that untrue. The foreign key sees that row and
+         * refuses the delete whatever its status, so without this the request
+         * reached `$award->delete()` and came back as a raw ORA-02292 carrying
+         * the failing SQL and the database host.
+         *
+         * There is no way to satisfy both rules at once, and that is the right
+         * answer rather than a dead end: an award that has held donor money is
+         * part of the financial record and is not a mis-click to be swept away.
+         * Revoking it is the supported path.
+         */
+        if ($this->writer->hasAllocationHistory($batch)) {
+            return response()->json([
+                'message' => 'This batch cannot be undone. Donor money was assigned to its awards '
+                    .'and later released, and that history is part of the financial record. '
+                    .'Revoke the awards instead of undoing the batch.',
+            ], 409);
+        }
+
         $undone = $this->writer->undo($batch, Actor::from($request));
 
         if (! $undone) {

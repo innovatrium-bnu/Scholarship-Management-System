@@ -43,6 +43,22 @@ final class Terms
         return self::ALL[max(0, min(count(self::ALL) - 1, $index))];
     }
 
+    /**
+     * The term a date falls in.
+     *
+     * BNU's own split: Spring runs January to June, Fall July to December,
+     * which is why a receipt dated 2026-09-12 belongs to Fall 2026. Returns the
+     * label even for a term outside ALL — a real date in Fall 2022 should say
+     * so rather than be clamped into a term the university has a record of.
+     */
+    public static function semesterOf(string $date): string
+    {
+        $month = (int) substr($date, 5, 2);
+        $year = substr($date, 0, 4);
+
+        return ($month <= 6 ? 'Spring ' : 'Fall ').$year;
+    }
+
     /** The date teaching starts in $label. */
     public static function dateOf(string $label): string
     {

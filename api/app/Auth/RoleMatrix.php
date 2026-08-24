@@ -48,6 +48,20 @@ final class RoleMatrix
     /** Create, change, or retire a scholarship. */
     public const SCHOLARSHIPS_EDIT = 'scholarships.edit';
 
+    /** Open the donors module and read pledges, receipts and allocations. */
+    public const DONORS_READ = 'donors.read';
+
+    /**
+     * Record a pledge or a receipt, and move money on or off an award.
+     *
+     * Data Entry deliberately does not hold this. Recording a receipt is
+     * saying money arrived, and allocating it is deciding which student it
+     * paid for -- both are the deciding half of the split this matrix already
+     * draws between entering the numbers a decision rests on and making the
+     * decision.
+     */
+    public const DONORS_MANAGE = 'donors.manage';
+
     /**
      * Create accounts and set what role they hold.
      *
@@ -66,6 +80,8 @@ final class RoleMatrix
         self::CRITERIA_EDIT,
         self::AWARDS_MANAGE,
         self::SCHOLARSHIPS_EDIT,
+        self::DONORS_READ,
+        self::DONORS_MANAGE,
         self::USERS_MANAGE,
     ];
 
@@ -110,6 +126,8 @@ final class RoleMatrix
             self::CRITERIA_EDIT,
             self::AWARDS_MANAGE,
             self::SCHOLARSHIPS_EDIT,
+            self::DONORS_READ,
+            self::DONORS_MANAGE,
             self::USERS_MANAGE,
         ],
         self::ADMIN => [
@@ -119,6 +137,8 @@ final class RoleMatrix
             self::CRITERIA_EDIT,
             self::AWARDS_MANAGE,
             self::SCHOLARSHIPS_EDIT,
+            self::DONORS_READ,
+            self::DONORS_MANAGE,
         ],
         /*
          * Data Entry keeps records straight and prepares applications for
@@ -129,6 +149,7 @@ final class RoleMatrix
         self::DATA_ENTRY => [
             self::APPLICATIONS_READ,
             self::STUDENTS_EDIT,
+            self::DONORS_READ,
         ],
         /*
          * Read-only by construction. Every read route is gated on being signed
@@ -136,6 +157,7 @@ final class RoleMatrix
          */
         self::REPORTING => [
             self::APPLICATIONS_READ,
+            self::DONORS_READ,
         ],
     ];
 

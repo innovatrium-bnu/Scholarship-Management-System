@@ -71,6 +71,21 @@ function ScholarshipDetail() {
       .filter((x): x is NonNullable<typeof x> => !!x);
   }, [scholarship, awards, students, id, scholarships]);
 
+  /*
+   * How many students have ever held this, not how many hold it now.
+   *
+   * `recipients` is built from the store's awards list, which is active-only —
+   * a revoked award is not in it. So the hint below, which says "in total,
+   * including past awards", was counting exactly the awards it promised to
+   * look past: an archived scholarship whose awards had all ended reported 0
+   * when twenty-four students had held it. The event log is the only record
+   * that survives a revocation, which is what it is for.
+   */
+  const everHeld = useMemo(
+    () => (scholarship ? everHeldRegNos(events, scholarship.id).size : 0),
+    [events, scholarship],
+  );
+
   if (!scholarship) {
     return (
       <div className="p-8">
@@ -90,20 +105,6 @@ function ScholarshipDetail() {
 
   const activeCount = recipients.filter((r) => r.award.status === "Active").length;
 
-  /*
-   * How many students have ever held this, not how many hold it now.
-   *
-   * `recipients` is built from the store's awards list, which is active-only —
-   * a revoked award is not in it. So the hint below, which says "in total,
-   * including past awards", was counting exactly the awards it promised to
-   * look past: an archived scholarship whose awards had all ended reported 0
-   * when twenty-four students had held it. The event log is the only record
-   * that survives a revocation, which is what it is for.
-   */
-  const everHeld = useMemo(
-    () => (scholarship ? everHeldRegNos(events, scholarship.id).size : 0),
-    [events, scholarship],
-  );
   const priority = precedenceOf(scholarships, scholarship.id);
 
   return (

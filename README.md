@@ -65,7 +65,7 @@ one to develop against; it talks to the API on 8000.
 The seed creates one account per role — `super.admin@bnu.edu.pk`,
 `admin@bnu.edu.pk`, `data.entry@bnu.edu.pk`, `reporting@bnu.edu.pk` — and a demo
 register of 2,000 generated students with eleven scholarships, six hundred
-awards and a review queue. Passwords are generated and printed once at seed
+awards, a review queue, and fourteen donors with their pledges and receipts. Passwords are generated and printed once at seed
 time; `SEED_USER_PASSWORD` pins them for local work and should never be set
 anywhere else.
 
@@ -154,6 +154,7 @@ Sanctum's session cookie simple and avoids CORS entirely.
 | [`src/lib/scholarship/types.ts`](src/lib/scholarship/types.ts)       | The domain model — scholarships, students, awards, audit entries                                                            |
 | [`src/lib/scholarship/evaluate.ts`](src/lib/scholarship/evaluate.ts) | **Eligibility engine.** Scope filters, automatic/manual rules, cohort-rank percentiles                                      |
 | [`src/lib/scholarship/merge.ts`](src/lib/scholarship/merge.ts)       | **Money.** How overlapping awards combine, precedence, trimming, suppression, the 100% ceiling                              |
+| [`src/lib/scholarship/funds.ts`](src/lib/scholarship/funds.ts)       | **Donor money.** What is pledged, what has arrived, what is still unassigned, and when a commitment needs renewing          |
 | [`src/lib/scholarship/store.tsx`](src/lib/scholarship/store.tsx)     | Application state and every mutation, each of which writes an audit entry                                                   |
 | [`src/lib/scholarship/seed.ts`](src/lib/scholarship/seed.ts)         | The original demo generator. No screen reads it; [`api/database/seeders/Demo/`](api/database/seeders/Demo/) is the live one |
 

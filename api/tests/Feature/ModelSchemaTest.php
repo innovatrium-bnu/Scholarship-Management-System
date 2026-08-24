@@ -72,7 +72,7 @@ function columnsFor(string $class): array
 }
 
 it('found every model, so the checks below are not vacuous', function () {
-    expect(everyModel())->toHaveCount(23);
+    expect(everyModel())->toHaveCount(28);
 });
 
 it('maps each model to a table that exists', function () {

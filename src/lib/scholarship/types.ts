@@ -65,6 +65,12 @@ export interface Scholarship {
   workStudyHoursPerMonth: number;
   requiresReapplication: boolean;
   fundingSource: "Internal" | "Donor";
+  /**
+   * The donor record, once one exists. `donorName` stays as the display
+   * fallback: it is what the form has always written and what four screens
+   * read, and a scholarship created before the donors module has no id.
+   */
+  donorId?: string;
   donorName?: string;
   quotaPerCohort?: number;
   status: "Active" | "Archived";
@@ -178,9 +184,153 @@ export interface Award {
   revocation?: Revocation;
 }
 
+/* ------------------------------------------------------- donors and funds -- */
+
+/**
+ * Where the money comes from.
+ *
+ * Until this module existed a "donor" was a free-text `donorName` on a
+ * scholarship, so two scholarships funded by the same organisation were two
+ * unrelated strings and nobody could ask what a donor still owed. A donor is
+ * now a row, and `Scholarship.donorId` points at it.
+ */
+export type DonorKind = "Organisation" | "Individual" | "Trust" | "Government";
+
+export type DonorStatus = "Active" | "Archived";
+
+/** How a receipt arrived. Recorded because reconciliation asks. */
+export type DonationMethod = "Bank transfer" | "Cheque" | "Cash" | "Online";
+
+export type PledgeStatus = "Active" | "Completed" | "Cancelled";
+
+export type AllocationStatus = "Active" | "Released";
+
+export interface Donor {
+  id: string;
+  name: string;
+  kind: DonorKind;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  notes?: string;
+  status: DonorStatus;
+}
+
+/**
+ * One dated expectation of money.
+ *
+ * A four-year commitment is four of these, not one row with a duration, because
+ * "what is still owed, and was it due yet" is the question `Receivables`
+ * answers and it cannot be answered without a date per instalment.
+ */
+export interface PledgeInstalment {
+  id: string;
+  sequence: number;
+  amount: number;
+  dueOn: string;
+}
+
+export interface Pledge {
+  id: string;
+  donorId: string;
+  /** Set when the pledge is earmarked; absent when it is unrestricted. */
+  scholarshipId?: string;
+  /** The donor's own agreement reference, if they gave one. */
+  reference?: string;
+  totalAmount: number;
+  termYears: number;
+  startsOn: string;
+  endsOn: string;
+  /**
+   * How long before `endsOn` this pledge should start appearing on the renewal
+   * report. Per pledge rather than a global constant: a government grant and a
+   * family trust do not want the same lead time, and a policy number belongs in
+   * data.
+   */
+  renewalNoticeDays: number;
+  status: PledgeStatus;
+  instalments: PledgeInstalment[];
+  notes?: string;
+}
+
+/** Money that actually arrived. */
+export interface Donation {
+  id: string;
+  donorId: string;
+  pledgeId?: string;
+  /** The instalment this receipt settles, when it settles one exactly. */
+  instalmentId?: string;
+  amount: number;
+  receivedOn: string;
+  method: DonationMethod;
+  reference?: string;
+  recordedBy: string;
+  notes?: string;
+  allocations: FundAllocation[];
+}
+
+/**
+ * Received money assigned to one award.
+ *
+ * The link is to an award rather than to a student directly: the award already
+ * names the student, the scholarship and the amount, so "which donor sponsors
+ * which student" and its audit trail come from it, and donor money reconciles
+ * against fee relief that actually exists.
+ */
+export interface FundAllocation {
+  id: string;
+  donationId: string;
+  awardId: string;
+  amount: number;
+  allocatedOn: string;
+  allocatedBy: string;
+  reason: string;
+  status: AllocationStatus;
+  /** Present if and only if `status` is "Released". */
+  releasedAt?: string;
+  releasedBy?: string;
+  releaseReason?: string;
+
+  /**
+   * Who the award paid for, carried on the allocation rather than looked up.
+   *
+   * Every award list this system serves is active-only, so resolving the award
+   * client-side lost the student the moment it was revoked — and the donor page
+   * rendered "Unknown" against money that was still assigned. The server reads
+   * these off the award row, whatever its status.
+   */
+  studentRegNo?: string;
+  scholarshipId?: string;
+  /** The award's status, not this allocation's. */
+  awardStatus?: "Active" | "Revoked";
+}
+
+/**
+ * What a donor has promised, sent, and had spent — the three buckets the
+ * Donors screen filters by.
+ *
+ * Derived on every read rather than stored. A status column on a donation would
+ * have to be maintained by every receipt and every allocation and would drift;
+ * and these are not really row states, because one receipt can be part
+ * allocated. They are amounts.
+ */
+export interface DonorFunding {
+  donorId: string;
+  /** Committed and not yet received. */
+  receivable: number;
+  /** Received, whatever has since happened to it. */
+  received: number;
+  /** Received and assigned to an award. */
+  assigned: number;
+  /** Received and not yet assigned. `received - assigned`. */
+  unassigned: number;
+  /** Receivable instalments whose due date has passed. */
+  overdue: number;
+}
+
 export interface AuditEntry {
   id: string;
-  entityType: "Scholarship" | "Student" | "Award" | "Batch" | "Application" | "Criteria";
+  entityType: "Scholarship" | "Student" | "Award" | "Batch" | "Application" | "Criteria" | "Donor";
   entityId: string;
   action: string;
   oldValue?: unknown;

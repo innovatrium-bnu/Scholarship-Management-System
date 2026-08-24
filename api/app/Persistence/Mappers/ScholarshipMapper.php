@@ -51,6 +51,7 @@ final class ScholarshipMapper
             donorName: $record->donor_name,
             quotaPerCohort: $record->quota_per_cohort,
             mayExceedCeiling: $record->may_exceed_ceiling,
+            donorId: $record->donor_id,
         );
     }
 

@@ -76,7 +76,7 @@ it('parsed something, so the comparisons below are not vacuous', function () {
 
     expect($matrix)->toHaveCount(count(RoleMatrix::ROLES))
         ->and($matrix[RoleMatrix::SUPER_ADMIN])->toHaveCount(count(RoleMatrix::CAPABILITIES))
-        ->and($matrix[RoleMatrix::REPORTING])->toHaveCount(1);
+        ->and($matrix[RoleMatrix::REPORTING])->toHaveCount(2);
 });
 
 it('grants each role exactly what roles.ts grants it', function () {
@@ -121,7 +121,13 @@ it('answers can() the way roles.ts does', function () {
         ->and(RoleMatrix::allows(RoleMatrix::REPORTING, RoleMatrix::STUDENTS_EDIT))->toBeFalse()
         ->and(RoleMatrix::allows(RoleMatrix::ADMIN, RoleMatrix::SCHOLARSHIPS_EDIT))->toBeTrue()
         ->and(RoleMatrix::allows(RoleMatrix::ADMIN, RoleMatrix::USERS_MANAGE))->toBeFalse()
-        ->and(RoleMatrix::allows(RoleMatrix::SUPER_ADMIN, RoleMatrix::USERS_MANAGE))->toBeTrue();
+        ->and(RoleMatrix::allows(RoleMatrix::SUPER_ADMIN, RoleMatrix::USERS_MANAGE))->toBeTrue()
+        // Donor money follows the same split: every role may look at it, and
+        // only the two that already decide where money goes may move it.
+        ->and(RoleMatrix::allows(RoleMatrix::REPORTING, RoleMatrix::DONORS_READ))->toBeTrue()
+        ->and(RoleMatrix::allows(RoleMatrix::DATA_ENTRY, RoleMatrix::DONORS_READ))->toBeTrue()
+        ->and(RoleMatrix::allows(RoleMatrix::DATA_ENTRY, RoleMatrix::DONORS_MANAGE))->toBeFalse()
+        ->and(RoleMatrix::allows(RoleMatrix::ADMIN, RoleMatrix::DONORS_MANAGE))->toBeTrue();
 });
 
 it('grades the roles, so each one holds at least what the next one down holds', function () {

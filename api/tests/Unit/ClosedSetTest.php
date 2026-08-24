@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domain\Support\FundingOptions;
 use App\Domain\Support\HouseholdOptions;
 use App\Domain\Support\RevocationCause;
 
@@ -55,6 +56,14 @@ it('parsed all three unions, so the comparisons below are not vacuous', function
     expect(typescriptCauses())->toHaveCount(4)
         ->and(typescriptGuardianStatuses())->toHaveCount(5)
         ->and(typescriptResidences())->toHaveCount(3);
+});
+
+it('parsed all five funding unions, so those comparisons are not vacuous either', function () {
+    expect(typescriptDonorKinds())->toHaveCount(4)
+        ->and(typescriptDonorStatuses())->toHaveCount(2)
+        ->and(typescriptPledgeStatuses())->toHaveCount(3)
+        ->and(typescriptDonationMethods())->toHaveCount(4)
+        ->and(typescriptAllocationStatuses())->toHaveCount(2);
 });
 
 /** @return list<string> */
@@ -114,4 +123,103 @@ it('names the two causes the writers actually record', function () {
     // declares them, and the lists must match.
     expect(RevocationCause::ALL)->toContain(RevocationCause::BY_HAND)
         ->and(RevocationCause::ALL)->toContain(RevocationCause::SCHOLARSHIP_ARCHIVED);
+});
+
+/* -- donors and funds ----------------------------------------------------- */
+
+/**
+ * The five closed sets the funding module works in.
+ *
+ * All five are also CHECK constraints on their columns, so drift here is not
+ * only a validator disagreeing with the client — it is a validator disagreeing
+ * with the database, and the failure arrives as ORA-02290 from a write the
+ * request layer had already accepted.
+ *
+ * @return list<string>
+ */
+function typescriptDonorKinds(): array
+{
+    return unionValues('/export type DonorKind\s*=\s*([^;]+);/', 'the DonorKind union');
+}
+
+/** @return list<string> */
+function typescriptDonorStatuses(): array
+{
+    return unionValues('/export type DonorStatus\s*=\s*([^;]+);/', 'the DonorStatus union');
+}
+
+/** @return list<string> */
+function typescriptPledgeStatuses(): array
+{
+    return unionValues('/export type PledgeStatus\s*=\s*([^;]+);/', 'the PledgeStatus union');
+}
+
+/** @return list<string> */
+function typescriptDonationMethods(): array
+{
+    return unionValues('/export type DonationMethod\s*=\s*([^;]+);/', 'the DonationMethod union');
+}
+
+/** @return list<string> */
+function typescriptAllocationStatuses(): array
+{
+    return unionValues('/export type AllocationStatus\s*=\s*([^;]+);/', 'the AllocationStatus union');
+}
+
+it('knows exactly the donor kinds types.ts declares', function () {
+    $declared = typescriptDonorKinds();
+    $mine = FundingOptions::DONOR_KINDS;
+
+    sort($declared);
+    sort($mine);
+
+    expect($declared)->toBe($mine);
+});
+
+it('knows exactly the donor statuses types.ts declares', function () {
+    $declared = typescriptDonorStatuses();
+    $mine = FundingOptions::DONOR_STATUSES;
+
+    sort($declared);
+    sort($mine);
+
+    expect($declared)->toBe($mine);
+});
+
+it('knows exactly the pledge statuses types.ts declares', function () {
+    $declared = typescriptPledgeStatuses();
+    $mine = FundingOptions::PLEDGE_STATUSES;
+
+    sort($declared);
+    sort($mine);
+
+    expect($declared)->toBe($mine);
+});
+
+it('knows exactly the donation methods types.ts declares', function () {
+    $declared = typescriptDonationMethods();
+    $mine = FundingOptions::DONATION_METHODS;
+
+    sort($declared);
+    sort($mine);
+
+    expect($declared)->toBe($mine);
+});
+
+it('knows exactly the allocation statuses types.ts declares', function () {
+    $declared = typescriptAllocationStatuses();
+    $mine = FundingOptions::ALLOCATION_STATUSES;
+
+    sort($declared);
+    sort($mine);
+
+    expect($declared)->toBe($mine);
+});
+
+it('keeps Released out of the statuses a new allocation may be created with', function () {
+    // An allocation is created Active and only ever becomes Released through
+    // the writer, which records who released it and why. A create path that
+    // accepted 'Released' would produce a released allocation with none of
+    // that, and the money would look returned with no record of the decision.
+    expect(FundingOptions::ALLOCATION_STATUSES)->toBe(['Active', 'Released']);
 });

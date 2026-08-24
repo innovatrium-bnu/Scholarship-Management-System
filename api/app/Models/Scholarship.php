@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\HasCanonicalUlids;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
@@ -26,7 +27,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'schools', 'programmes', 'batches', 'batch_mode', 'batch_from',
     'semester_from', 'semester_till', 'all_semesters', 'review_cycle',
     'max_duration_years', 'work_study_hours_per_month', 'requires_reapplication',
-    'funding_source', 'donor_name', 'quota_per_cohort',
+    'funding_source', 'donor_name', 'donor_id', 'quota_per_cohort',
     'status', 'effective_from', 'may_exceed_ceiling',
 ])]
 class Scholarship extends Model
@@ -66,6 +67,18 @@ class Scholarship extends Model
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('status', 'Active');
+    }
+
+    /**
+     * The donor funding this, once one has been registered.
+     *
+     * Nullable and stays that way: most scholarships are internally funded, and
+     * a donor-funded one created before the donors module has a `donor_name`
+     * and no id. `donor_name` remains the display fallback.
+     */
+    public function donor(): BelongsTo
+    {
+        return $this->belongsTo(Donor::class);
     }
 
     public function coverageLines(): HasMany

@@ -97,14 +97,55 @@ final class Row
     /**
      * Insert rows in chunks, and say how many went in.
      *
+     * Keys are squared off first, and that is not tidiness. A multi-row insert
+     * takes its column list from the **first** row and then binds every later
+     * row positionally, so a list whose rows carry different keys produces a
+     * statement whose columns and values do not line up — the values slide into
+     * the wrong columns, or the bind count comes up short and Oracle rejects a
+     * statement whose SQL looks perfectly reasonable in the error message.
+     *
+     * That is reachable here because one table is written by more than one
+     * generator: domain_events gets rows from the award, application and donor
+     * generators, and only the last of those carries donor_id and amount_pkr.
+     * Filling the union of keys with null costs nothing and removes a whole
+     * class of failure that only appears when a new generator is added.
+     *
      * @param  list<array<string, mixed>>  $rows
      */
     public static function insert(string $table, array $rows): int
     {
-        foreach (array_chunk($rows, self::CHUNK) as $chunk) {
+        foreach (array_chunk(self::squared($rows), self::CHUNK) as $chunk) {
             DB::table($table)->insert($chunk);
         }
 
         return count($rows);
+    }
+
+    /**
+     * Every row given the same keys, missing ones filled with null.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private static function squared(array $rows): array
+    {
+        if ($rows === []) {
+            return [];
+        }
+
+        $columns = [];
+
+        foreach ($rows as $row) {
+            foreach (array_keys($row) as $column) {
+                $columns[$column] = null;
+            }
+        }
+
+        return array_map(
+            // Union in this order so the row's own values win and the nulls
+            // only fill what it did not have.
+            fn (array $row) => $row + $columns,
+            $rows,
+        );
     }
 }

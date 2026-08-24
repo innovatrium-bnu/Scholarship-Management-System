@@ -69,8 +69,8 @@ function codeWithoutComments(string $source): string
 }
 
 it('has domain sources to check, so this file is not vacuous', function () {
-    // 5 services, 19 data classes, 5 support classes.
-    expect(domainSources())->toHaveCount(29);
+    // 6 services, 25 data classes, 6 support classes.
+    expect(domainSources())->toHaveCount(37);
 });
 
 it('imports nothing from Laravel, Eloquent or the database', function () {
